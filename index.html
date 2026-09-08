@@ -154,7 +154,6 @@
   .failring{fill:none; stroke:var(--fail); stroke-width:2; rx:6}
 
   .datt-dot{fill:var(--datt)}
-  .lanelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.06em}
   .agelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.02em}
   .tlab{font-family:var(--mono); font-size:11px; fill:var(--fg)}
 
@@ -683,9 +682,6 @@ function edgePath(a,b){
 
 function drawGraph(){
   dag.innerHTML = '';
-  dag.appendChild(Object.assign(el('text',{x:24,y:26,class:'lanelab'}),{textContent:'ORDERS LANE'}));
-  dag.appendChild(Object.assign(el('text',{x:24,y:LANE_B-16,class:'lanelab'}),{textContent:'CUSTOMER LANE'}));
-  dag.appendChild(Object.assign(el('text',{x:24,y:LANE_C-16,class:'lanelab'}),{textContent:'PAYMENTS LANE'}));
 
   EDGES.forEach(([a,b])=>{
     const p = el('path',{d:edgePath(a,b), class:'edge', 'data-from':a, 'data-to':b});
