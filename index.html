@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dbt State, step by step</title>
+<meta name="description" content="An interactive, six-scene walkthrough of dbt State: watch a real lineage graph rebuild, reuse, clone, and skip nodes across prod and dev runs, with a tuning panel for the underlying configs.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="dbt State, step by step">
+<meta property="og:description" content="An interactive, six-scene walkthrough of dbt State: watch a real lineage graph rebuild, reuse, clone, and skip nodes across prod and dev runs, with a tuning panel for the underlying configs.">
+<meta property="og:url" content="https://sdurry.github.io/dbt-state-guide/">
+<meta property="og:image" content="https://sdurry.github.io/dbt-state-guide/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="dbt State, step by step">
+<meta name="twitter:description" content="An interactive, six-scene walkthrough of dbt State: watch a real lineage graph rebuild, reuse, clone, and skip nodes across prod and dev runs, with a tuning panel for the underlying configs.">
+<meta name="twitter:image" content="https://sdurry.github.io/dbt-state-guide/og-image.png">
+<style>
+  :root{
+    --ink:#0D1620;
+    --panel:#132231;
+    --panel-2:#0F1C28;
+    --rule:#24394B;
+    --rule-soft:#1B2C3B;
+    --fg:#E9F0F4;
+    --fg-dim:#8CA6B8;
+    --fg-faint:#5C7488;
+    --burn:#FF694A;        /* compute spent */
+    --burn-soft:#3A1F1C;
+    --reuse:#4FC3A9;       /* no compute */
+    --reuse-soft:#12302C;
+    --datt:#F0BE4B;        /* what you pay dbt State */
+    --fail:#F2555A;
+    --blocked:#4A5C6B;
+    --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+    --r:6px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--ink); color:var(--fg);
+    font-family:var(--sans);
+    font-size:clamp(13px,0.95vw,16px); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex; flex-direction:column; min-height:100vh}
+
+  /* ---------- header ---------- */
+  header{
+    border-bottom:1px solid var(--rule);
+    padding:14px clamp(16px,2.2vw,32px) 0;
+    background:linear-gradient(180deg,#101E2B,var(--ink));
+  }
+  .brandrow{display:flex; align-items:baseline; gap:16px; flex-wrap:wrap}
+  .brand{font-size:1.05em; font-weight:650; letter-spacing:-.015em}
+  .brand b{color:var(--burn); font-weight:650}
+  .brandnote{color:var(--fg-faint); font-size:.82em}
+  .steps{display:flex; gap:2px; margin:12px 0 0; flex-wrap:wrap}
+  .step{
+    appearance:none; border:1px solid var(--rule-soft); border-bottom:none;
+    background:transparent; color:var(--fg-dim);
+    font-family:var(--sans); font-size:.82em; text-align:left;
+    padding:8px 12px 9px; cursor:pointer; border-radius:var(--r) var(--r) 0 0;
+    display:flex; gap:9px; align-items:center; max-width:230px;
+    transition:background .12s, color .12s;
+  }
+  .step:hover{color:var(--fg); background:#16283A}
+  .step .n{
+    font-family:var(--mono); font-size:.9em; color:var(--fg-faint);
+    border:1px solid var(--rule); border-radius:3px; padding:0 5px; flex:none;
+  }
+  .step[aria-selected="true"]{
+    background:var(--panel); color:var(--fg); border-color:var(--rule);
+    box-shadow:inset 0 2px 0 var(--burn);
+  }
+  .step[aria-selected="true"] .n{color:var(--burn); border-color:#4A2A22}
+  .step .lbl{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+  /* ---------- scene bar ---------- */
+  .scenebar{
+    display:flex; gap:20px; align-items:flex-start; justify-content:space-between;
+    padding:16px clamp(16px,2.2vw,32px); border-bottom:1px solid var(--rule);
+    background:var(--panel); flex-wrap:wrap;
+  }
+  .scenebar h1{
+    margin:0 0 4px; font-size:clamp(17px,1.6vw,25px); font-weight:620;
+    letter-spacing:-.02em; max-width:60ch;
+  }
+  .premise{margin:0; color:var(--fg-dim); max-width:72ch}
+  .envwrap{display:flex; gap:8px; align-items:center; margin-bottom:8px}
+  .env{
+    font-family:var(--mono); font-size:.76em; letter-spacing:.04em;
+    padding:2px 8px; border-radius:3px; border:1px solid;
+  }
+  .env.prod{color:#FFB59F; border-color:#5A3227; background:#241612}
+  .env.dev{color:#9FD8FF; border-color:#26465C; background:#10222E}
+  .cmd{
+    font-family:var(--mono); font-size:.82em; color:var(--fg);
+    background:var(--panel-2); border:1px solid var(--rule);
+    border-radius:var(--r); padding:5px 10px;
+  }
+  .cmd::before{content:"$ "; color:var(--fg-faint)}
+  .navbtns{display:flex; gap:8px; flex:none}
+  button.ghost{
+    font-family:var(--sans); font-size:.85em; color:var(--fg-dim);
+    background:transparent; border:1px solid var(--rule); border-radius:var(--r);
+    padding:7px 12px; cursor:pointer;
+  }
+  button.ghost:hover:not(:disabled){color:var(--fg); border-color:#3A566D}
+  button.ghost:disabled{opacity:.35; cursor:default}
+
+  /* ---------- main ---------- */
+  main{display:grid; grid-template-columns:minmax(0,1fr) clamp(290px,25vw,380px); flex:1}
+  .stage{padding:clamp(10px,1.4vw,22px) clamp(16px,2.2vw,32px); min-width:0; display:flex; flex-direction:column; gap:14px}
+  svg.dag{width:100%; height:auto; display:block}
+
+  /* node visuals */
+  .node rect.card{fill:var(--panel); stroke:var(--rule); stroke-width:1.5; rx:5}
+  .node text.nm{font-family:var(--mono); font-size:13px; fill:var(--fg)}
+  .node text.mt{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint)}
+  .node text.act{font-family:var(--mono); font-size:10.5px; letter-spacing:.05em}
+  .node .tick{fill:none; stroke:var(--rule); stroke-width:1.2; rx:2}
+  .edge{fill:none; stroke:var(--rule); stroke-width:1.6}
+  .edge.hot{stroke:var(--burn); stroke-width:2.2}
+  .edge.cool{stroke:var(--reuse); stroke-dasharray:3 4}
+  .node, .edge, .tick{transition:opacity .18s}
+
+  .node[data-a="build"] rect.card{fill:var(--burn-soft); stroke:var(--burn)}
+  .node[data-a="build"] text.act{fill:var(--burn)}
+  .node[data-a="reuse"] rect.card{fill:transparent; stroke:var(--reuse); stroke-dasharray:5 4}
+  .node[data-a="reuse"] text.act{fill:var(--reuse)}
+  .node[data-a="clone"] rect.card{fill:var(--reuse-soft); stroke:var(--reuse); stroke-dasharray:5 4}
+  .node[data-a="clone"] text.act{fill:var(--reuse)}
+  .node[data-a="blocked"] rect.card{fill:transparent; stroke:var(--blocked); stroke-dasharray:2 5}
+  .node[data-a="blocked"] text.act{fill:var(--blocked)}
+  .node[data-a="blocked"] text.nm{fill:var(--blocked)}
+  .node[data-a="fresh"] rect.card{fill:#241612; stroke:#7A4133}
+  .node[data-a="fresh"] text.act{fill:#FFB59F}
+  .node[data-a="stale"] rect.card{fill:var(--panel-2); stroke:var(--rule)}
+  .node[data-a="stale"] text.act{fill:var(--fg-faint)}
+  .node[data-a="pending"]{opacity:.32}
+  .node[data-a="pending"] text.act{fill:transparent}
+
+  .tick[data-t="run"]{fill:var(--burn); stroke:var(--burn)}
+  .tick[data-t="reuse"]{fill:none; stroke:var(--reuse); stroke-dasharray:2 2}
+  .tick[data-t="reusefail"]{fill:none; stroke:var(--fail); stroke-width:1.8; stroke-dasharray:2 2}
+  .tick[data-t="fail"]{fill:var(--fail); stroke:var(--fail)}
+  .tick[data-t="blocked"]{fill:none; stroke:var(--blocked); stroke-dasharray:1 3}
+  .tick[data-t="pending"]{fill:none; stroke:var(--rule-soft)}
+  .failring{fill:none; stroke:var(--fail); stroke-width:2; rx:6}
+
+  .datt-dot{fill:var(--datt)}
+  .lanelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.06em}
+  .tlab{font-family:var(--mono); font-size:11px; fill:var(--fg)}
+
+  .legend{display:flex; gap:clamp(10px,1.5vw,22px); flex-wrap:wrap; font-size:.8em; color:var(--fg-dim); border-top:1px solid var(--rule-soft); padding-top:12px}
+  .legend span{display:flex; align-items:center; gap:7px}
+  .sw{width:20px; height:12px; border-radius:3px; border:1.5px solid; flex:none}
+  .sw.b{background:var(--burn-soft); border-color:var(--burn)}
+  .sw.r{background:transparent; border-color:var(--reuse); border-style:dashed}
+  .sw.c{background:var(--reuse-soft); border-color:var(--reuse); border-style:dashed}
+  .sw.x{background:transparent; border-color:var(--blocked); border-style:dotted}
+  .sw.t{width:12px; background:var(--fail); border-color:var(--fail)}
+
+  /* ---------- right rail ---------- */
+  aside{border-left:1px solid var(--rule); background:var(--panel-2); display:flex; flex-direction:column; min-width:0}
+  .runbar{padding:14px 16px; border-bottom:1px solid var(--rule)}
+  button.run{width:100%}
+  button.run{
+    flex:1; font-family:var(--sans); font-weight:600; font-size:.95em;
+    color:#1A0C08; background:var(--burn); border:none; border-radius:var(--r);
+    padding:10px 14px; cursor:pointer;
+  }
+  button.run:hover{background:#FF7E63}
+  button.run:disabled{background:#4A2C25; color:#9A776E; cursor:default}
+
+  .meters{padding:14px 16px; border-bottom:1px solid var(--rule); display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule-soft)}
+  .m{background:var(--panel-2); padding:9px 10px}
+  .m .k{font-size:.72em; color:var(--fg-faint); letter-spacing:.02em}
+  .m .v{font-family:var(--mono); font-size:clamp(17px,1.7vw,23px); line-height:1.25; letter-spacing:-.02em}
+  .m.wide{grid-column:1/-1}
+  .v.burn{color:var(--burn)} .v.reuse{color:var(--reuse)} .v.datt{color:var(--datt)}
+  .m .sub{font-size:.72em; color:var(--fg-faint); font-family:var(--mono)}
+
+  .ledger{padding:12px 16px; border-bottom:1px solid var(--rule)}
+  .ledger h2{margin:0 0 3px; font-size:.85em; font-weight:600}
+  .ledger p{margin:0 0 8px; font-size:.78em; color:var(--fg-faint)}
+  .pips{display:flex; flex-wrap:wrap; gap:3px}
+  .pip{width:11px; height:11px; border-radius:2px; background:var(--datt)}
+  .pip.old{background:transparent; border:1px solid #6B5A2C}
+
+  .log{flex:1; overflow:auto; padding:12px 16px 26px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
+  .log div{white-space:pre-wrap; word-break:break-word; color:var(--fg-dim)}
+  .log .ok{color:var(--reuse)}
+  .log .bl{color:var(--burn)}
+  .log .er{color:var(--fail)}
+  .log .hd{color:var(--fg-faint)}
+  .log .sum{color:var(--fg); border-top:1px solid var(--rule-soft); margin-top:8px; padding-top:8px}
+
+  /* ---------- notes strip ---------- */
+  .notes{
+    border-top:1px solid var(--rule); background:var(--panel);
+    padding:14px clamp(16px,2.2vw,32px);
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:clamp(14px,2vw,30px);
+  }
+  .notes .note{display:flex; gap:10px; font-size:.86em; color:var(--fg-dim); max-width:62ch}
+  .notes .note b{color:var(--fg); font-weight:600}
+  .notes .bar{width:2px; background:var(--rule); flex:none; border-radius:2px}
+  .notes .note.key .bar{background:var(--datt)}
+  /* tuning panel */
+  .cfg{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:0 clamp(14px,2vw,28px);
+       align-content:start; max-height:38vh; overflow:auto}
+  .cfgrow{border-top:1px solid var(--rule-soft)}
+  .cfghead{
+    width:100%; display:flex; align-items:center; gap:10px; text-align:left;
+    background:none; border:none; padding:9px 0; cursor:pointer; color:var(--fg);
+    font-family:var(--mono); font-size:.82em;
+  }
+  .cfghead:hover .cfgname{color:var(--burn)}
+  .cfgname{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .cfgval{font-size:.92em; color:var(--datt); border:1px solid #574818; background:#241E0B; border-radius:3px; padding:1px 6px}
+  .cfgval.def{color:var(--fg-faint); border-color:var(--rule); background:transparent}
+  .cfgcar{color:var(--fg-faint); font-size:.85em; flex:none}
+  .cfgbody{padding:0 0 12px; font-family:var(--sans); font-size:.82em; color:var(--fg-dim); max-width:56ch}
+  .cfgbody p{margin:0 0 7px}
+  .cfgbody .here{color:var(--fg)}
+  .segs{display:flex; gap:4px; margin-top:9px; flex-wrap:wrap}
+  .seg{
+    font-family:var(--mono); font-size:.92em; padding:4px 9px; cursor:pointer;
+    background:var(--panel-2); color:var(--fg-dim); border:1px solid var(--rule); border-radius:4px;
+  }
+  .seg:hover{color:var(--fg)}
+  .seg[aria-pressed="true"]{background:var(--burn); border-color:var(--burn); color:#1A0C08}
+  .cfgfoot{grid-column:1/-1; border-top:1px solid var(--rule-soft); margin-top:6px; padding-top:10px;
+           display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:.78em; color:var(--fg-faint)}
+  .foot{padding:8px clamp(16px,2.2vw,32px) 14px; font-size:.74em; color:var(--fg-faint); background:var(--panel)}
+  .foot kbd{font-family:var(--mono); border:1px solid var(--rule); border-radius:3px; padding:0 4px}
+
+  :focus-visible{outline:2px solid #6FB8E8; outline-offset:2px}
+  @media (min-width:941px){
+    .app{height:100vh; overflow:hidden}
+    main{min-height:0; overflow:hidden}
+    .stage{min-height:0; overflow:auto}
+    aside{min-height:0; overflow:hidden}
+    svg.dag{max-height:47vh}
+  }
+  @media (max-width:940px){
+    main{grid-template-columns:1fr}
+    aside{border-left:none; border-top:1px solid var(--rule)}
+    .step .lbl{display:none}
+    .stage{overflow-x:auto}
+    svg.dag{width:1040px; max-width:none; flex:none}
+  }
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brandrow">
+      <div class="brand"><b>dbt State</b>, step by step</div>
+      <div class="brandnote">one job, one team, one day: watch what actually runs</div>
+    </div>
+    <div class="steps" role="tablist" id="steps"></div>
+  </header>
+
+  <div class="scenebar">
+    <div>
+      <div class="envwrap"><span class="env" id="env"></span><span class="cmd" id="cmd"></span></div>
+      <h1 id="title"></h1>
+      <p class="premise" id="premise"></p>
+    </div>
+    <div class="navbtns">
+      <button class="ghost" id="prev">Back</button>
+      <button class="ghost" id="next">Next</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="stage">
+      <svg class="dag" id="dag" viewBox="0 0 1040 366" role="img" aria-label="dbt project lineage graph"></svg>
+      <div class="legend">
+        <span><i class="sw b"></i>built, warehouse compute</span>
+        <span><i class="sw r"></i>reused in place</span>
+        <span><i class="sw c"></i>cloned from another schema</span>
+        <span><i class="sw x"></i>skipped, upstream test failed</span>
+        <span><i class="sw" style="background:var(--datt);border-color:var(--datt);width:12px"></i>counts as a DATT</span>
+        <span style="color:var(--fg-faint)">small squares are tests: filled ran, dashed reused, red failed. Views are reused but never billed.</span>
+      </div>
+    </section>
+
+    <aside>
+      <div class="runbar">
+        <button class="run" id="run">Run this scene</button>
+      </div>
+      <div class="meters" id="meters"></div>
+      <div class="ledger">
+        <h2 id="ledgerTitle">Today's DATT ledger</h2>
+        <p id="ledgerSub">Nothing reused yet.</p>
+        <div class="pips" id="pips"></div>
+      </div>
+      <div class="log" id="log"></div>
+    </aside>
+  </main>
+
+  <div class="notes" id="notes"></div>
+  <div class="foot">
+    Illustrative figures, not a quote: $0.20 per model built and $0.05 per test query as a stand-in for warehouse compute, $0.094 per DATT.
+    Durations are indicative. Move with <kbd>←</kbd> <kbd>→</kbd>, run with <kbd>R</kbd>.
+  </div>
+</div>
+
+<script>
+/* ---------------------------------------------------------------
+   Graph
+----------------------------------------------------------------*/
+const COL = [24, 214, 404, 594, 812];
+const LANE_A = 74, LANE_B = 268, MID = 171;
+const NW = 168, NH = 56;
+
+const NODES = [
+  {id:'src_orders',    name:'raw.orders',        type:'source',      x:COL[0], y:LANE_A},
+  {id:'stg_orders',    name:'stg_orders',        type:'view',        x:COL[1], y:LANE_A},
+  {id:'int_items',     name:'int_order_items',   type:'table',       x:COL[2], y:LANE_A},
+  {id:'fct_orders',    name:'fct_orders',        type:'incremental', x:COL[3], y:LANE_A},
+  {id:'src_customers', name:'raw.customers',     type:'source',      x:COL[0], y:LANE_B},
+  {id:'stg_customers', name:'stg_customers',     type:'view',        x:COL[1], y:LANE_B},
+  {id:'snap_tier',     name:'snap_customer_tier',type:'snapshot',    x:COL[2], y:LANE_B},
+  {id:'dim_customers', name:'dim_customers',     type:'table',       x:COL[3], y:LANE_B},
+  {id:'mart',          name:'mart_customer_360', type:'table',       x:COL[4], y:MID}
+];
+const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));
+
+const EDGES = [
+  ['src_orders','stg_orders'],['stg_orders','int_items'],['int_items','fct_orders'],['fct_orders','mart'],
+  ['src_customers','stg_customers'],['stg_customers','snap_tier'],['snap_tier','dim_customers'],['dim_customers','mart']
+];
+
+const TESTS = [
+  {id:'t1', parent:'stg_orders',    name:'not_null(order_id)'},
+  {id:'t2', parent:'int_items',     name:'not_null(order_item_id)'},
+  {id:'t3', parent:'fct_orders',    name:'unique(order_id)'},
+  {id:'t4', parent:'fct_orders',    name:'assert_order_total_positive'},
+  {id:'t5', parent:'stg_customers', name:'unique(customer_id)'},
+  {id:'t6', parent:'snap_tier',     name:'not_null(tier)'},
+  {id:'t7', parent:'dim_customers', name:'unique(customer_id)'},
+  {id:'t8', parent:'mart',          name:'relationships(customer_id)'},
+  {id:'t9', parent:'mart',          name:'not_null(lifetime_value)'}
+];
+const TEST = Object.fromEntries(TESTS.map(t => [t.id, t]));
+
+/* Views are reused like anything else, but they are never billed as DATTs.
+   Tests attached to a view are billed as normal. */
+const BILLABLE = id => !(NODE[id] && NODE[id].type === 'view');
+
+/* cost + duration model (illustrative) */
+const C = {build:0.20, test:0.05, clone:0.01, datt:0.094};
+const T = {build:25, test:8, clone:2, reuse:0.3};
+
+/* ---------------------------------------------------------------
+   Scenes
+----------------------------------------------------------------*/
+const ALL_MODELS = ['stg_orders','int_items','fct_orders','stg_customers','snap_tier','dim_customers','mart'];
+const build = ids => Object.fromEntries(ids.map(i => [i,'build']));
+const set = (ids, v) => Object.fromEntries(ids.map(i => [i, v]));
+
+const SCENES = [
+  {
+    tab:'No state, prod',
+    env:'prod', envLabel:'production',
+    cmd:'dbt build',
+    title:'Without dbt State, the whole project rebuilds',
+    premise:'Only raw.orders landed new rows overnight. dbt has no way to know that, so all seven nodes and all nine tests execute — including the customer lane, which is byte-for-byte what it was yesterday.',
+    ledger:'prod',
+    nodes:{...build(ALL_MODELS), src_orders:'fresh', src_customers:'stale'},
+    tests:set(['t1','t2','t3','t4','t5','t6','t7','t8','t9'],'run'),
+    perDay:5,
+    notes:[
+      ['Every run is a full run','dbt Core on its own has no memory of the last run\'s data. Selection is the only lever you have, and hand-maintained selectors go stale fast.'],
+      ['The waste is invisible','Nothing in the log tells you that dim_customers produced an identical table. You pay for it, and you wait for it, five times a day.']
+    ]
+  },
+  {
+    tab:'State on, run 1',
+    env:'prod', envLabel:'production',
+    cmd:'dbt build',
+    title:'With dbt State, only the lane with new data rebuilds',
+    premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane is untouched, so it is reused in place, and that reuse is what a DATT counts.',
+    ledger:'prod',
+    nodes:{
+      src_orders:'fresh', src_customers:'stale',
+      stg_orders:'reuse', int_items:'build', fct_orders:'build',
+      stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse', mart:'build'
+    },
+    tests:{t1:'run',t2:'run',t3:'run',t4:'run',t5:'reuse',t6:'reuse',t7:'reuse',t8:'run',t9:'run'},
+    perDay:5,
+    notes:[
+      ['Views are reused, and never billed','stg_orders sits on the fresh source, but a view stores nothing: it reads the new rows when queried, so unchanged logic means no rebuild. Views are also excluded from DATTs whether they are skipped or cloned. Their tests are billed as normal.'],
+      ['Reuse is the unit you pay for','Seven nodes were handed back instead of executed, but only five are DATTs: the two views are free. The snapshot counts like any other relation, and so does every distinct test.', true]
+    ]
+  },
+  {
+    tab:'Run 2, same day',
+    env:'prod', envLabel:'production',
+    cmd:'dbt build',
+    title:'Second run of the day: same reuse, no new DATTs, one red test',
+    premise:'Three hours later the job runs again. The same seven nodes are reused — but you already paid for each of them once today, so the bill does not move. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
+    ledger:'prod',
+    nodes:{
+      src_orders:'fresh', src_customers:'stale',
+      stg_orders:'reuse', int_items:'build', fct_orders:'build',
+      stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse', mart:'blocked'
+    },
+    tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'reuse',t6:'reuse',t7:'reuse',t8:'blocked',t9:'blocked'},
+    notes:[
+      ['A DATT is charged once per day','Every reuse after the first is free. The more often the job runs, the further the same seven DATTs are amortised — this is why hourly jobs save far more than daily ones.', true],
+      ['Bad data stops at the gate','assert_order_total_positive fails, so mart_customer_360 and its two tests never run. Someone gets paged, and the next two scenes are her afternoon.']
+    ]
+  },
+  {
+    tab:'No state, dev',
+    env:'dev', envLabel:'development',
+    cmd:'dbt build --select +fct_orders',
+    title:'Reproducing the failure the old way: rebuild the lane',
+    premise:'Her dev schema is empty, so she cannot just run the test — the tables it points at do not exist. She pulls the whole upstream lane in with the + operator, waits for fct_orders to build over full history, and repeats that on every edit. Five iterations before the fix lands.',
+    ledger:'dev',
+    iterations:5,
+    nodes:{
+      src_orders:'fresh', src_customers:'pending',
+      stg_orders:'build', int_items:'build', fct_orders:'build',
+      stg_customers:'pending', snap_tier:'pending', dim_customers:'pending', mart:'pending'
+    },
+    tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'pending',t6:'pending',t7:'pending',t8:'pending',t9:'pending'},
+    notes:[
+      ['defer helps, but only halfway','With --defer she could skip building the upstream models, but fct_orders itself is still selected, so it still builds — from scratch, because there is nothing in dev to build incrementally on top of.'],
+      ['Nine minutes of waiting to try five things','Each edit costs a full lane rebuild before she learns anything. The graph shows one iteration; the meter adds up all five.']
+    ]
+  },
+  {
+    tab:'State on, dev',
+    env:'dev', envLabel:'development',
+    cmd:'dbt build --select +fct_orders',
+    title:'With dbt State, prod comes to her',
+    premise:'Same command, no flags to remember. dbt State finds identical logic with fresher data in the prod schema, clones the upstream tables into her dev schema and replays the test results it already holds. A reused result still surfaces as a failure, so the red test is in front of her without a single query, and the cloned fct_orders is there to inspect. Only her edits to fct_orders trigger a real build after that.',
+    ledger:'dev',
+    iterations:5,
+    laterIteration:{nodes:{fct_orders:'build'}, tests:{t4:'run'}},
+    nodes:{
+      src_orders:'fresh', src_customers:'pending',
+      stg_orders:'clone', int_items:'clone', fct_orders:'clone',
+      stg_customers:'pending', snap_tier:'pending', dim_customers:'pending', mart:'pending'
+    },
+    tests:{t1:'reuse',t2:'reuse',t3:'reuse',t4:'reusefail',t5:'pending',t6:'pending',t7:'pending',t8:'pending',t9:'pending'},
+    notes:[
+      ['No --defer, no --state, no manifest','Deferral happens on its own, and it goes further than deferral: an unchanged selected node is cloned rather than rebuilt, so she can query it. The manifest juggling that state:modified needs is gone.'],
+      ['A replayed failure is still a failure','She sees the red test before any query runs. The clone of stg_orders is free because it is a view; the two cloned tables and all four test results are her DATTs, charged once for the day.', true]
+    ]
+  },
+  {
+    tab:'Tuning',
+    env:'prod', envLabel:'production',
+    cmd:'dbt build',
+    title:'The dials, and what each one actually does',
+    premise:'Back in production, where these configs earn their keep. raw.orders landed 90 minutes ago, the customer side has not moved in three days, and a CI merge job left a fresher int_order_items behind 20 minutes ago. Every config below sits at its documented default. Open one, change it, and the run re-evaluates as you go.',
+    ledger:'tune',
+    tuning:true,
+    perDay:5,
+    nodes:{}, tests:{},
+    notes:[]
+  }
+];
+
+/* ---------------------------------------------------------------
+   Tuning scene: a small decision engine driven by the real configs
+----------------------------------------------------------------*/
+const PARENTS = Object.fromEntries(NODES.map(n=>[n.id,[]]));
+EDGES.forEach(([a,b])=> PARENTS[b].push(a));
+
+const CFG_DEFAULT = {
+  lag_tolerance:'45m', compare_unrendered_code:false, require_fresh_data_from:'any',
+  evaluate_volatile_sql:false, pre_clone:'if_missing', execute_hooks_on_any_reuse:false,
+  allow_clones:true
+};
+let cfg = {...CFG_DEFAULT};
+const LAG_MIN = {'45m':45, '4h':240, '7d':10080};
+const DATA_AGE = 90;   // minutes since raw.orders landed new rows
+
+const CONFIGS = [
+  {key:'lag_tolerance', def:'45m', opts:['45m','4h','7d'], scope:'model',
+   what:'How much time must pass since the last upstream data change before a node is eligible for a rebuild. Data freshness only: a SQL change rebuilds regardless.',
+   here:'raw.orders landed 90 minutes ago. Set the tolerance above that and the orders lane is not yet eligible, so it is skipped in place and prod stays 90 minutes behind on purpose.'},
+  {key:'compare_unrendered_code', def:false, opts:[false,true], scope:'model',
+   what:'Check the Jinja template as well as the rendered SQL. A rebuild then needs both to change, so values that differ every run stop invalidating the model.',
+   here:'stg_orders stamps env_var(\'AIRFLOW_RUN_ID\') into a column, so its rendered SQL differs on every single run. At the default it rebuilds every run and drags the lane behind it.'},
+  {key:'require_fresh_data_from', def:'any', opts:['any','all'], scope:'model',
+   what:'Whether any or all direct parents need fresh data before a node is eligible for a rebuild.',
+   here:'mart_customer_360 has two parents. Only the orders side is fresh, so all holds the mart back until the customer side moves too.'},
+  {key:'evaluate_volatile_sql', def:false, opts:[false,true], scope:'model',
+   what:'Store and compare the runtime output of volatile functions instead of just the function name.',
+   here:'int_order_items selects current_timestamp(). This is the one dial here that costs you more: switch it on and the model rebuilds every run by design.'},
+  {key:'allow_clones', def:true, opts:[true,false], scope:'profile',
+   what:'Whether dbt State may clone into a target at all. Set false on prod to stop dev or CI tables being cloned into production.',
+   here:'A merge job rebuilt int_order_items in the CI schema 20 minutes ago, same logic, fresher data. dbt State would rather clone that than recompute. Set false and prod recomputes it instead.'},
+  {key:'execute_hooks_on_any_reuse', def:false, opts:[false,true], scope:'model',
+   what:'Run pre- and post-hooks even when a node is reused instead of built.',
+   here:'dim_customers carries a post-hook that grants select. At the default a skipped model runs no hooks, so grants quietly drift.'},
+  {key:'pre_clone', def:'if_missing', opts:['never','if_missing','always'], scope:'model',
+   what:'Whether dbt State pre-populates incremental models and snapshots by cloning production before a run.',
+   here:'No effect in this run: fct_orders already exists in the target schema. This one earns its keep in a fresh dev or CI schema, which is scene 5.'}
+];
+
+/* Production run. Every relation already exists in the target schema, so the
+   fallback is a skip in place. A CI merge job left a fresher int_order_items
+   behind, which is the only cross-schema clone candidate. */
+function evaluateTuning(){
+  const lag = LAG_MIN[cfg.lag_tolerance];
+  const pastLag = DATA_AGE >= lag;
+  const nodes = {src_orders:'fresh', src_customers:'stale'};
+  const tests = {}, reasons = {};
+  const extra = {queries:0, cost:0, secs:0, lines:[]};
+  const fresh = {src_orders:true, src_customers:false};
+
+  ORDER.filter(id => NODE[id].type !== 'source').forEach(id=>{
+    const ps = PARENTS[id], freshPs = ps.filter(p=>fresh[p]);
+    const gate = cfg.require_fresh_data_from==='all' ? freshPs.length===ps.length : freshPs.length>0;
+    const logic = (id==='stg_orders' && !cfg.compare_unrendered_code)
+        ? "rendered SQL changed, env_var('AIRFLOW_RUN_ID')"
+      : (id==='int_items' && cfg.evaluate_volatile_sql)
+        ? 'volatile current_timestamp() now compared by value'
+      : null;
+    const ciCandidate = (id==='int_items' && !logic);
+
+    let a, why;
+    if(logic){ a='build'; why=logic; }
+    else if(gate && pastLag){
+      if(ciCandidate && cfg.allow_clones){ a='clone'; why='fresher copy in the CI schema, same logic'; }
+      else if(ciCandidate){ a='build'; why='allow_clones is false, the CI copy cannot be used'; }
+      else { a='build'; why=`fresh parent data, ${DATA_AGE}m past lag_tolerance ${cfg.lag_tolerance}`; }
+    }
+    else {
+      a='reuse';
+      why = freshPs.length && !gate ? 'require_fresh_data_from: all, the customer side is stale'
+          : freshPs.length && !pastLag ? `data is ${DATA_AGE}m old, inside lag_tolerance ${cfg.lag_tolerance}`
+          : 'logic and upstream data unchanged';
+    }
+    nodes[id]=a; reasons[id]=why;
+    fresh[id] = (a==='build' || a==='clone');
+
+    if(id==='dim_customers' && a==='reuse'){
+      if(cfg.execute_hooks_on_any_reuse){
+        extra.cost+=0.01; extra.secs+=2; extra.queries+=1;
+        extra.lines.push(['ok', 'post-hook on dim_customers executed on reuse, grants applied']);
+      } else {
+        extra.lines.push(['er', 'post-hook on dim_customers skipped, grants not reapplied']);
+      }
+    }
+    TESTS.filter(t=>t.parent===id).forEach(t=>{ tests[t.id] = fresh[id] ? 'run' : 'reuse'; });
+  });
+
+  extra.lines.push(['hd', `pre_clone: ${cfg.pre_clone} — no effect, every relation already exists in prod`]);
+  return {nodes, tests, reasons, extra};
+}
+
+function applyTuning(scene){
+  const r = evaluateTuning();
+  scene.nodes = r.nodes; scene.tests = r.tests; scene.reasons = r.reasons; scene.extra = r.extra;
+}
+
+/* ---------------------------------------------------------------
+   Metrics
+----------------------------------------------------------------*/
+function tally(scene){
+  const t = {build:0, reuse:0, clone:0, freeReuse:0, blocked:0,
+             testRun:0, testReuse:0, testFailRun:0, testFailReuse:0, testBlocked:0};
+  ALL_MODELS.forEach(id=>{
+    const a = scene.nodes[id];
+    if(a==='build') t.build++; else if(a==='reuse') t.reuse++;
+    else if(a==='clone') t.clone++; else if(a==='blocked') t.blocked++;
+    if((a==='reuse'||a==='clone') && !BILLABLE(id)) t.freeReuse++;
+  });
+  TESTS.forEach(x=>{
+    const a = scene.tests[x.id];
+    if(a==='run') t.testRun++;
+    else if(a==='fail'){ t.testRun++; t.testFailRun++; }
+    else if(a==='reuse') t.testReuse++;
+    else if(a==='reusefail'){ t.testReuse++; t.testFailReuse++; }
+    else if(a==='blocked') t.testBlocked++;
+  });
+  return t;
+}
+
+function dattKeys(scene){
+  const keys = [];
+  ALL_MODELS.forEach(id=>{
+    const a = scene.nodes[id];
+    if((a==='reuse'||a==='clone') && BILLABLE(id)) keys.push(scene.ledger+':'+id);
+  });
+  TESTS.forEach(x=>{
+    const a = scene.tests[x.id];
+    if(a==='reuse'||a==='reusefail') keys.push(scene.ledger+':'+x.id);
+  });
+  return keys;
+}
+
+/* per-scene run economics, derived from the same states the graph paints */
+function economics(scene){
+  const t = tally(scene);
+  const one = {
+    queries: t.build + t.clone + t.testRun,
+    builds: t.build,
+    reuses: t.reuse + t.clone + t.testReuse,
+    wh: t.build*C.build + t.clone*C.clone + t.testRun*C.test,
+    secs: t.build*T.build + t.clone*T.clone + t.testRun*T.test + (t.reuse+t.testReuse)*T.reuse
+  };
+  const x = scene.extra;
+  if(x){ one.queries += x.queries; one.wh += x.cost; one.secs += x.secs; }
+  if(!scene.iterations) return {...one, label:'this run'};
+
+  const rest = scene.iterations - 1;
+  if(scene.laterIteration){
+    const lb = Object.values(scene.laterIteration.nodes).filter(v=>v==='build').length;
+    const lt = Object.values(scene.laterIteration.tests).filter(v=>v==='run').length;
+    return {
+      queries: one.queries + rest*(lb+lt),
+      builds: one.builds + rest*lb,
+      reuses: one.reuses,
+      wh: one.wh + rest*(lb*C.build + lt*C.test),
+      secs: one.secs + rest*(lb*T.build + lt*T.test),
+      label: scene.iterations + ' iterations'
+    };
+  }
+  return {
+    queries: one.queries*scene.iterations,
+    builds: one.builds*scene.iterations,
+    reuses: 0,
+    wh: one.wh*scene.iterations,
+    secs: one.secs*scene.iterations,
+    label: scene.iterations + ' iterations'
+  };
+}
+
+const money = n => '$' + n.toFixed(2);
+const clock = s => s < 60 ? Math.round(s)+'s' : Math.floor(s/60)+'m ' + String(Math.round(s%60)).padStart(2,'0') + 's';
+
+/* ---------------------------------------------------------------
+   Render: DAG
+----------------------------------------------------------------*/
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, attrs={}) => { const e = document.createElementNS(NS,n); for(const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const dag = document.getElementById('dag');
+
+function edgePath(a,b){
+  const A = NODE[a], B = NODE[b];
+  const x1 = A.x + NW, y1 = A.y + NH/2, x2 = B.x, y2 = B.y + NH/2;
+  return `M${x1} ${y1} C${x1+45} ${y1} ${x2-45} ${y2} ${x2} ${y2}`;
+}
+
+function drawGraph(){
+  dag.innerHTML = '';
+  dag.appendChild(Object.assign(el('text',{x:24,y:26,class:'lanelab'}),{textContent:'ORDERS LANE'}));
+  dag.appendChild(Object.assign(el('text',{x:24,y:LANE_B-16,class:'lanelab'}),{textContent:'CUSTOMER LANE'}));
+
+  EDGES.forEach(([a,b])=>{
+    const p = el('path',{d:edgePath(a,b), class:'edge', 'data-from':a, 'data-to':b});
+    dag.appendChild(p);
+  });
+
+  NODES.forEach(n=>{
+    const g = el('g',{class:'node', 'data-id':n.id, 'data-a':'pending'});
+    g.appendChild(el('rect',{class:'card', x:n.x, y:n.y, width:NW, height:NH}));
+    const nm = el('text',{class:'nm', x:n.x+12, y:n.y+23}); nm.textContent = n.name;
+    const mt = el('text',{class:'mt', x:n.x+12, y:n.y+38}); mt.textContent = n.type;
+    const ac = el('text',{class:'act', x:n.x+NW-12, y:n.y+38, 'text-anchor':'end'});
+    g.append(nm, mt, ac);
+    if(n.type!=='source'){
+      const ring = el('rect',{class:'failring', x:n.x-4, y:n.y-4, width:NW+8, height:NH+8, opacity:0});
+      g.appendChild(ring);
+    }
+    dag.appendChild(g);
+
+    const mine = TESTS.filter(t=>t.parent===n.id);
+    mine.forEach((t,i)=>{
+      const s = el('rect',{class:'tick','data-id':t.id,'data-t':'pending', x:n.x+12+i*17, y:n.y+NH+9, width:12, height:12, rx:2});
+      const title = el('title'); title.textContent = t.name; s.appendChild(title);
+      dag.appendChild(s);
+    });
+    if(mine.length){
+      const lbl = el('text',{class:'tlab', x:n.x+12+mine.length*17+4, y:n.y+NH+19});
+      lbl.textContent = mine.length===1 ? '1 test' : mine.length+' tests';
+      dag.appendChild(lbl);
+    }
+  });
+}
+
+function paint(nodeStates, testStates, dattSet){
+  NODES.forEach(n=>{
+    const g = dag.querySelector(`.node[data-id="${n.id}"]`);
+    const a = nodeStates[n.id] || 'pending';
+    g.setAttribute('data-a', a);
+    const act = g.querySelector('text.act');
+    const free = !BILLABLE(n.id);
+    act.textContent = {build:'BUILD',
+                       reuse: free ? 'REUSE, FREE' : 'REUSE',
+                       clone: free ? 'CLONE, FREE' : 'CLONE',
+                       blocked:'SKIPPED', fresh:'NEW DATA', stale:'NO NEW DATA', pending:''}[a] || '';
+    const ring = g.querySelector('.failring');
+    if(ring){
+      const failed = TESTS.some(t=>t.parent===n.id && (testStates[t.id]==='fail' || testStates[t.id]==='reusefail'));
+      ring.setAttribute('opacity', failed ? 1 : 0);
+    }
+    const dot = g.querySelector('.datt-dot');
+    const isDatt = (a==='reuse'||a==='clone') && BILLABLE(n.id) && dattSet.has(n.id);
+    if(isDatt && !dot){
+      g.appendChild(el('circle',{class:'datt-dot', cx:n.x+NW-9, cy:n.y+11, r:4}));
+    } else if(!isDatt && dot){ dot.remove(); }
+  });
+  TESTS.forEach(t=>{
+    const s = dag.querySelector(`.tick[data-id="${t.id}"]`);
+    s.setAttribute('data-t', testStates[t.id] || 'pending');
+  });
+  EDGES.forEach(([a,b])=>{
+    const p = dag.querySelector(`.edge[data-from="${a}"][data-to="${b}"]`);
+    const to = nodeStates[b];
+    p.setAttribute('class', 'edge' + (to==='build' ? ' hot' : (to==='reuse'||to==='clone') ? ' cool' : ''));
+  });
+}
+
+/* ---------------------------------------------------------------
+   State
+----------------------------------------------------------------*/
+let idx = 0;
+let ledgers = {prod:new Set(), dev:new Set()};
+const blankLive = () => ({nodes:{}, tests:{}, datt:new Set(), newDatts:0, oldDatts:0, freeReuses:0, done:false});
+let live = blankLive();
+let timers = [];
+
+/* the ledger is a function of where you are in the story, not of what you clicked */
+function seedLedger(i){
+  const s = SCENES[i];
+  const carried = new Set();
+  for(let j=0; j<i; j++){
+    if(SCENES[j].ledger === s.ledger) dattKeys(SCENES[j]).forEach(k=>carried.add(k));
+  }
+  ledgers[s.ledger] = carried;
+}
+
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
+
+/* ---------------------------------------------------------------
+   Render: chrome
+----------------------------------------------------------------*/
+const $ = id => document.getElementById(id);
+
+function buildSteps(){
+  const box = $('steps');
+  box.innerHTML = '';
+  SCENES.forEach((s,i)=>{
+    const b = document.createElement('button');
+    b.className = 'step'; b.setAttribute('role','tab');
+    b.setAttribute('aria-selected', i===idx);
+    b.innerHTML = `<span class="n">${i+1}</span><span class="lbl">${s.tab}</span>`;
+    b.onclick = () => go(i);
+    box.appendChild(b);
+  });
+}
+
+function renderMeters(scene, showFinal){
+  const e = economics(scene);
+  const t = tally(scene);
+  const base = SCENES[0];
+  const m = $('meters');
+  const dattCost = live.newDatts * C.datt;
+  const total = e.wh + dattCost;
+
+  let compare = '';
+  if((scene.ledger==='prod' || scene.tuning) && idx>0){
+    const b = economics(base);
+    const pct = Math.round((1 - total/(b.wh)) * 100);
+    compare = `${pct}% cheaper than scene 1`;
+  }
+  if(scene.iterations && idx===4){
+    const b = economics(SCENES[3]);
+    const pct = Math.round((1 - total/b.wh) * 100);
+    compare = `${pct}% cheaper than scene 4`;
+  }
+
+  const rows = [
+    ['warehouse queries', showFinal ? e.queries : '—', '', e.label],
+    ['nodes reused', showFinal ? e.reuses : '—', 'reuse',
+      showFinal && e.reuses ? (t.freeReuse ? `${t.freeReuse} free, views` : 'no compute') : ''],
+    ['wall clock', showFinal ? clock(e.secs) : '—', '', e.label],
+    ['warehouse cost', showFinal ? money(e.wh) : '—', 'burn', ''],
+    ['dbt State cost', showFinal ? money(dattCost) : '—', 'datt', showFinal ? `${live.newDatts} new DATT${live.newDatts===1?'':'s'}` : ''],
+    ['total', showFinal ? money(total) : '—', '', compare]
+  ];
+  m.innerHTML = rows.map(([k,v,cls,sub],i)=>`
+    <div class="m">
+      <div class="k">${k}</div>
+      <div class="v ${cls||''}">${v}</div>
+      ${sub?`<div class="sub">${sub}</div>`:''}
+    </div>`).join('');
+
+  if(scene.perDay && showFinal){
+    const perDay = idx===0
+      ? total*scene.perDay
+      : e.wh*scene.perDay + (live.newDatts + live.oldDatts)*C.datt;
+    const note = idx===0
+      ? `${money(perDay)} a day at 5 runs`
+      : `${money(perDay)} a day at 5 runs, DATTs paid once`;
+    m.insertAdjacentHTML('beforeend',
+      `<div class="m wide"><div class="k">projected</div><div class="v" style="font-size:1em">${note}</div></div>`);
+  }
+}
+
+function renderLedger(scene){
+  const total = ledgers[scene.ledger].size;
+  $('ledgerTitle').textContent = scene.env==='prod'
+    ? "Today's DATT ledger, production" : "Today's DATT ledger, her dev schema";
+  const pips = $('pips');
+  pips.innerHTML = '';
+  const keys = [...ledgers[scene.ledger]];
+  keys.forEach(k=>{
+    const d = document.createElement('div');
+    d.className = 'pip' + (live.datt.has(k.split(':')[1]) ? '' : ' old');
+    d.title = k.split(':')[1];
+    pips.appendChild(d);
+  });
+  $('ledgerSub').textContent = !total
+    ? 'Nothing reused yet.'
+    : live.done
+      ? `${total} unique reuses so far. ${live.newDatts} charged in this run, ${live.oldDatts} already paid for.`
+      : `${total} unique reuses carried over from earlier runs.`;
+}
+
+function logLine(html, cls){
+  const d = document.createElement('div');
+  if(cls) d.className = cls;
+  d.innerHTML = html;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function renderNotes(scene){
+  if(scene.tuning){ renderConfigPanel(); return; }
+  $('notes').className = 'notes';
+  $('notes').innerHTML = scene.notes.map(([h,b,key])=>`
+    <div class="note${key?' key':''}"><div class="bar"></div><div><b>${h}.</b> ${b}</div></div>`).join('');
+}
+
+let openCfg = null;
+const shown = v => typeof v === 'boolean' ? String(v) : v;
+
+function renderConfigPanel(){
+  const box = $('notes');
+  box.className = 'notes cfg';
+  box.innerHTML = CONFIGS.map(c=>{
+    const cur = cfg[c.key], isDef = cur === c.def, open = openCfg === c.key;
+    return `<div class="cfgrow">
+      <button class="cfghead" data-cfg="${c.key}" aria-expanded="${open}">
+        <span class="cfgcar">${open?'▾':'▸'}</span>
+        <span class="cfgname">${c.key}</span>
+        <span class="cfgval${isDef?' def':''}">${shown(cur)}</span>
+      </button>
+      ${open?`<div class="cfgbody">
+        <p>${c.what}</p>
+        <p class="here">${c.here}</p>
+        <div class="segs">${c.opts.map(o=>
+          `<button class="seg" data-cfg="${c.key}" data-val="${shown(o)}" aria-pressed="${o===cur}">${shown(o)}${o===c.def?' ·':''}</button>`
+        ).join('')}</div>
+      </div>`:''}
+    </div>`;
+  }).join('') + `<div class="cfgfoot">
+      <span>· marks the default. allow_clones is set per target in profiles.yml, alongside defer_to_target and metadata_warehouse, which are not simulated here. The rest are set per model, folder or project.</span>
+      <button class="ghost" id="cfgreset">Back to defaults</button>
+    </div>`;
+
+  box.querySelectorAll('.cfghead').forEach(b=> b.onclick = ()=>{
+    openCfg = openCfg === b.dataset.cfg ? null : b.dataset.cfg;
+    renderConfigPanel();
+  });
+  box.querySelectorAll('.seg').forEach(b=> b.onclick = ()=>{
+    const c = CONFIGS.find(x=>x.key===b.dataset.cfg);
+    cfg[c.key] = c.opts.find(o=>shown(o)===b.dataset.val);
+    renderConfigPanel();
+    runScene(true);
+  });
+  const r = $('cfgreset');
+  if(r) r.onclick = ()=>{ cfg = {...CFG_DEFAULT}; renderConfigPanel(); runScene(true); };
+}
+
+/* ---------------------------------------------------------------
+   Run animation
+----------------------------------------------------------------*/
+const ORDER = ['src_orders','src_customers','stg_orders','stg_customers','int_items','snap_tier','fct_orders','dim_customers','mart'];
+
+function runScene(instant){
+  const scene = SCENES[idx];
+  clearTimers();
+  if(scene.tuning) applyTuning(scene);
+  seedLedger(idx);
+  $('log').innerHTML = '';
+  live = blankLive();
+  $('run').disabled = true;
+  paint({}, {}, new Set());
+  renderMeters(scene, false);
+
+  const inScope = a => a && a !== 'pending';
+  const totalNodes = ALL_MODELS.filter(id=>inScope(scene.nodes[id])).length
+                   + TESTS.filter(t=>inScope(scene.tests[t.id])).length;
+  let counter = 0;
+  const steps = [];
+
+  logLine(`Running with dbt=2.0.1`, 'hd');
+  logLine(`Found 7 models, 9 data tests, 2 sources, 1 snapshot`, 'hd');
+  if(idx>0) logLine(`dbt State: fetching metadata for 19 nodes`, 'hd');
+  logLine(`Concurrency: 4 threads (target='${scene.env}')`, 'hd');
+  logLine('&nbsp;');
+
+  ORDER.forEach(id=>{
+    const n = NODE[id];
+    const a = scene.nodes[id];
+    if(!inScope(a)) return;
+    steps.push(()=>{
+      live.nodes[id] = a;
+      if(n.type!=='source'){
+        counter++;
+        const label = `${n.type==='snapshot'?'snapshot':n.type==='view'?'sql view model':'sql table model'} ${scene.env}.${n.name}`;
+        const why = scene.reasons && scene.reasons[id];
+        if(a==='build') logLine(`${counter} of ${totalNodes} OK created ${label} <span class="bl">[${why || 'SUCCESS'}]</span>`, '');
+        else if(a==='reuse'){ noteDatt(id, scene); logLine(`${counter} of ${totalNodes} REUSE ${label} <span class="ok">[${why || 'REUSED, logic unchanged'}${BILLABLE(id)?'':', free, view'}]</span>`, ''); }
+        else if(a==='clone'){ noteDatt(id, scene); logLine(`${counter} of ${totalNodes} CLONE ${label} <span class="ok">[${why || 'CLONED from production'}${BILLABLE(id)?'':', free, view'}]</span>`, ''); }
+        else if(a==='blocked') logLine(`${counter} of ${totalNodes} SKIP ${label} <span class="er">[SKIPPED, upstream test failed]</span>`, '');
+      } else {
+        logLine(a==='fresh'
+          ? `source ${n.name} <span class="bl">new rows since last run</span>`
+          : `source ${n.name} <span class="ok">unchanged since last run</span>`, 'hd');
+      }
+      paint(live.nodes, live.tests, live.datt);
+      renderLedger(scene);
+    });
+
+    TESTS.filter(t=>t.parent===id && inScope(scene.tests[t.id])).forEach(t=>{
+      steps.push(()=>{
+        const a2 = scene.tests[t.id];
+        live.tests[t.id] = a2;
+        counter++;
+        if(a2==='run') logLine(`${counter} of ${totalNodes} PASS ${t.name}`, '');
+        else if(a2==='fail') logLine(`${counter} of ${totalNodes} FAIL ${t.name} <span class="er">[38 rows with a negative order_total]</span>`, 'er');
+        else if(a2==='reuse'){ noteDatt(t.id, scene); logLine(`${counter} of ${totalNodes} REUSE ${t.name} <span class="ok">[previous result reused]</span>`, ''); }
+        else if(a2==='reusefail'){ noteDatt(t.id, scene); logLine(`${counter} of ${totalNodes} REUSE ${t.name} <span class="er">[previous result reused, still FAIL: 38 rows]</span>`, 'er'); }
+        else if(a2==='blocked') logLine(`${counter} of ${totalNodes} SKIP ${t.name}`, '');
+        paint(live.nodes, live.tests, live.datt);
+        renderLedger(scene);
+      });
+    });
+  });
+
+  steps.push(()=>{
+    live.done = true;
+    if(scene.extra && scene.extra.lines.length){
+      logLine('&nbsp;');
+      scene.extra.lines.forEach(([cls,txt])=> logLine(txt, cls));
+    }
+    const t = tally(scene);
+    const e = economics(scene);
+    logLine('&nbsp;');
+    if(scene.iterations){
+      logLine(`Iteration 1 of ${scene.iterations}. Repeat on every edit.`, 'hd');
+      logLine(`Across ${scene.iterations} iterations: ${e.queries} warehouse queries, ${clock(e.secs)}.`, 'sum');
+    } else {
+      logLine(`Done. PASS=${t.testRun - t.testFailRun} ERROR=${t.testFailRun + t.testFailReuse} SKIP=${t.blocked + t.testBlocked} REUSED=${t.reuse + t.clone + t.testReuse} TOTAL=${totalNodes}`, 'sum');
+    }
+    if(live.newDatts || live.oldDatts || live.freeReuses){
+      logLine(`dbt State: ${live.newDatts} new DATT${live.newDatts===1?'':'s'} charged, ${live.oldDatts} already counted today, ${live.freeReuses} free (views).`, 'sum');
+    }
+    $('run').disabled = false;
+    renderMeters(scene, true);
+    renderLedger(scene);
+  });
+
+  const gap = (reduced || instant) ? 0 : 210;
+  steps.forEach((fn,i)=> timers.push(setTimeout(fn, i*gap)));
+}
+
+function noteDatt(id, scene){
+  if(!BILLABLE(id)){ live.freeReuses++; return; }
+  const key = scene.ledger + ':' + id;
+  if(ledgers[scene.ledger].has(key)){ live.oldDatts++; }
+  else { ledgers[scene.ledger].add(key); live.newDatts++; live.datt.add(id); }
+}
+
+/* ---------------------------------------------------------------
+   Navigation
+----------------------------------------------------------------*/
+function go(i, fromHash){
+  idx = Math.max(0, Math.min(SCENES.length-1, i));
+  const s = SCENES[idx];
+  if(!fromHash){
+    const target = '#/' + (idx+1);
+    if(location.hash !== target) history.pushState(null, '', target);
+  }
+  clearTimers();
+  if(s.tuning) applyTuning(s);
+  seedLedger(idx);
+  [...$('steps').children].forEach((b,j)=> b.setAttribute('aria-selected', j===idx));
+  $('env').textContent = s.envLabel;
+  $('env').className = 'env ' + s.env;
+  $('cmd').textContent = s.cmd;
+  $('title').textContent = s.title;
+  $('premise').textContent = s.premise;
+  $('prev').disabled = idx===0;
+  $('next').disabled = idx===SCENES.length-1;
+  renderNotes(s);
+  live = blankLive();
+  $('log').innerHTML = '';
+  logLine('Press <span class="bl">Run this scene</span> to execute.', 'hd');
+  paint({src_orders:s.nodes.src_orders, src_customers:s.nodes.src_customers}, {}, new Set());
+  renderMeters(s, false);
+  renderLedger(s);
+  $('run').disabled = false;
+  if(s.tuning) runScene(true);
+}
+
+$('prev').onclick = ()=> go(idx-1);
+$('next').onclick = ()=> go(idx+1);
+$('run').onclick = runScene;
+
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName === 'BUTTON' && e.key === ' ') return;
+  if(e.key==='ArrowRight') go(idx+1);
+  else if(e.key==='ArrowLeft') go(idx-1);
+  else if(e.key.toLowerCase()==='r') runScene();
+});
+
+function sceneFromHash(){
+  const m = /^#\/([1-6])$/.exec(location.hash);
+  return m ? parseInt(m[1],10)-1 : 0;
+}
+
+window.addEventListener('popstate', ()=> go(sceneFromHash(), true));
+
+drawGraph();
+buildSteps();
+go(sceneFromHash());
+</script>
+</body>
+</html>
