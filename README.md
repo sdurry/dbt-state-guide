@@ -24,6 +24,17 @@ This walkthrough was fact-checked against:
 - [FAQ: are views rebuilt with dbt State?](https://docs.getdbt.com/faqs/State/views-rebuilt#views-with-select)
 - [dbt State migration guide](https://docs.getdbt.com/docs/deploy/dbt-state-migration)
 
+## Scraping / AI training
+
+This is a static GitHub Pages site, so there's no server to enforce access
+control — this is a best-effort deterrent, not a hard block. `robots.txt`
+disallows known AI training and agent crawlers (GPTBot, CCBot, ClaudeBot,
+PerplexityBot, and similar) while leaving normal search engine indexing and
+human visitors untouched. `index.html` also carries a `noai` robots meta tag
+and a `tdm-reservation` meta tag (the TDMRep text-and-data-mining opt-out
+standard). Well-behaved crawlers respect these; nothing here stops one that
+doesn't.
+
 ## A note on the numbers
 
 All dollar figures in this walkthrough are illustrative, not a quote: $0.20 per
