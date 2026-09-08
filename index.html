@@ -1026,7 +1026,7 @@ function runScene(instant){
     renderLedger(scene);
   });
 
-  const gap = (reduced || instant) ? 0 : 210;
+  const gap = (reduced || instant) ? 0 : 550;
   steps.forEach((fn,i)=> timers.push(setTimeout(fn, Math.floor(i/THREADS)*gap)));
 }
 
