@@ -155,6 +155,7 @@
 
   .datt-dot{fill:var(--datt)}
   .lanelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.06em}
+  .agelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.02em}
   .tlab{font-family:var(--mono); font-size:11px; fill:var(--fg)}
 
   .legend{display:flex; gap:clamp(10px,1.5vw,22px); flex-wrap:wrap; font-size:.8em; color:var(--fg-dim); border-top:1px solid var(--rule-soft); padding-top:12px}
@@ -378,6 +379,7 @@ const SCENES = [
     title:'Without dbt State, the whole project rebuilds',
     premise:'Only raw.orders landed new rows overnight. dbt has no way to know that, so all seven nodes and all nine tests execute — including the customer lane, which is byte-for-byte what it was yesterday.',
     ledger:'prod',
+    srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d'},
     nodes:{...build(ALL_MODELS), src_orders:'fresh', src_customers:'stale'},
     tests:set(['t1','t2','t3','t4','t5','t6','t7','t8','t9'],'run'),
     perDay:5,
@@ -393,6 +395,7 @@ const SCENES = [
     title:'With dbt State, only the lane with new data rebuilds',
     premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane is untouched, so it is reused in place, and that reuse is what a DATT counts.',
     ledger:'prod',
+    srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d'},
     nodes:{
       src_orders:'fresh', src_customers:'stale',
       stg_orders:'reuse', int_items:'build', fct_orders:'build',
@@ -402,7 +405,8 @@ const SCENES = [
     perDay:5,
     notes:[
       ['Views are reused, and never billed','stg_orders sits on the fresh source, but a view stores nothing: it reads the new rows when queried, so unchanged logic means no rebuild. Views are also excluded from DATTs whether they are skipped or cloned. Their tests are billed as normal.'],
-      ['Reuse is the unit you pay for','Seven nodes were handed back instead of executed, but only five are DATTs: the two views are free. The snapshot counts like any other relation, and so does every distinct test.', true]
+      ['Reuse is the unit you pay for','Seven nodes were handed back instead of executed, but only five are DATTs: the two views are free. The snapshot counts like any other relation, and so does every distinct test.', true],
+      ['Freshness is a live warehouse check, not memory','Each run, dbt State reads last-modified timestamps for upstream tables straight from warehouse metadata (like INFORMATION_SCHEMA), not from what it built last time. The age next to each source above is that check — how long since the data actually changed.']
     ]
   },
   {
@@ -412,6 +416,7 @@ const SCENES = [
     title:'Second run of the day: same reuse, no new DATTs, one red test',
     premise:'Three hours later the job runs again. The same seven nodes are reused — but you already paid for each of them once today, so the bill does not move. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
     ledger:'prod',
+    srcAge:{src_orders:'landed 15m ago', src_customers:'unchanged 3d'},
     nodes:{
       src_orders:'fresh', src_customers:'stale',
       stg_orders:'reuse', int_items:'build', fct_orders:'build',
@@ -431,6 +436,7 @@ const SCENES = [
     premise:'Her dev schema is empty, so she cannot just run the test — the tables it points at do not exist. She pulls the whole upstream lane in with the + operator, waits for fct_orders to build over full history, and repeats that on every edit. Five iterations before the fix lands.',
     ledger:'dev',
     iterations:5,
+    srcAge:{src_orders:'landed 3h ago'},
     nodes:{
       src_orders:'fresh', src_customers:'pending',
       stg_orders:'build', int_items:'build', fct_orders:'build',
@@ -450,6 +456,7 @@ const SCENES = [
     premise:'Same command, no flags to remember. dbt State finds identical logic with fresher data in the prod schema, clones the upstream tables into her dev schema and replays the test results it already holds. A reused result still surfaces as a failure, so the red test is in front of her without a single query, and the cloned fct_orders is there to inspect. Only her edits to fct_orders trigger a real build after that.',
     ledger:'dev',
     iterations:5,
+    srcAge:{src_orders:'landed 3h ago'},
     laterIteration:{nodes:{fct_orders:'build'}, tests:{t4:'run'}},
     nodes:{
       src_orders:'fresh', src_customers:'pending',
@@ -564,12 +571,13 @@ function evaluateTuning(){
   });
 
   extra.lines.push(['hd', `pre_clone: ${cfg.pre_clone} — no effect, every relation already exists in prod`]);
-  return {nodes, tests, reasons, extra};
+  const srcAge = {src_orders:`landed ${DATA_AGE}m ago`, src_customers:'unchanged 3d'};
+  return {nodes, tests, reasons, extra, srcAge};
 }
 
 function applyTuning(scene){
   const r = evaluateTuning();
-  scene.nodes = r.nodes; scene.tests = r.tests; scene.reasons = r.reasons; scene.extra = r.extra;
+  scene.nodes = r.nodes; scene.tests = r.tests; scene.reasons = r.reasons; scene.extra = r.extra; scene.srcAge = r.srcAge;
 }
 
 /* ---------------------------------------------------------------
@@ -684,6 +692,10 @@ function drawGraph(){
     }
     dag.appendChild(g);
 
+    if(n.type==='source'){
+      dag.appendChild(el('text',{class:'agelab', 'data-id':n.id, x:n.x+12, y:n.y+NH+19}));
+    }
+
     const mine = TESTS.filter(t=>t.parent===n.id);
     mine.forEach((t,i)=>{
       const s = el('rect',{class:'tick','data-id':t.id,'data-t':'pending', x:n.x+12+i*17, y:n.y+NH+9, width:12, height:12, rx:2});
@@ -728,6 +740,13 @@ function paint(nodeStates, testStates, dattSet){
     const p = dag.querySelector(`.edge[data-from="${a}"][data-to="${b}"]`);
     const to = nodeStates[b];
     p.setAttribute('class', 'edge' + (to==='build' ? ' hot' : (to==='reuse'||to==='clone') ? ' cool' : ''));
+  });
+}
+
+function renderSourceAges(scene){
+  const ages = scene.srcAge || {};
+  NODES.filter(n=>n.type==='source').forEach(n=>{
+    dag.querySelector(`.agelab[data-id="${n.id}"]`).textContent = ages[n.id] || '';
   });
 }
 
@@ -911,6 +930,7 @@ function runScene(instant){
   const scene = SCENES[idx];
   clearTimers();
   if(scene.tuning) applyTuning(scene);
+  renderSourceAges(scene);
   seedLedger(idx);
   $('log').innerHTML = '';
   live = blankLive();
@@ -926,7 +946,11 @@ function runScene(instant){
 
   logLine(`Running with dbt=2.0.1`, 'hd');
   logLine(`Found 7 models, 9 data tests, 2 sources, 1 snapshot`, 'hd');
-  if(idx>0) logLine(`dbt State: fetching metadata for 19 nodes`, 'hd');
+  if(idx>0){
+    const ages = scene.srcAge || {};
+    const parts = NODES.filter(n=>n.type==='source' && ages[n.id]).map(n=>`${n.name} ${ages[n.id]}`);
+    logLine(`dbt State: checking warehouse metadata — ${parts.length ? parts.join(', ') : 'fetching for 19 nodes'}`, 'hd');
+  }
   logLine(`Concurrency: 4 threads (target='${scene.env}')`, 'hd');
   logLine('&nbsp;');
 
@@ -1015,6 +1039,7 @@ function go(i, fromHash){
   }
   clearTimers();
   if(s.tuning) applyTuning(s);
+  renderSourceAges(s);
   seedLedger(idx);
   [...$('steps').children].forEach((b,j)=> b.setAttribute('aria-selected', j===idx));
   $('env').textContent = s.envLabel;
