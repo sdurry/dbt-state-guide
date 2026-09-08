@@ -1062,7 +1062,8 @@ function go(i, fromHash){
   live = blankLive();
   $('log').innerHTML = '';
   if(!s.tuning) logLine('Press <span class="bl">Run this scene</span> to execute.', 'hd');
-  paint({src_orders:s.nodes.src_orders, src_customers:s.nodes.src_customers}, {}, new Set());
+  const srcStates = Object.fromEntries(NODES.filter(n=>n.type==='source').map(n=>[n.id, s.nodes[n.id]]));
+  paint(srcStates, {}, new Set());
   renderMeters(s, false);
   renderLedger(s);
   $('run').disabled = false;
