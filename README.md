@@ -19,10 +19,19 @@ step, and no dependencies — built to work on bad conference wifi and offline.
 This walkthrough was fact-checked against:
 
 - [dbt State, about](https://docs.getdbt.com/docs/deploy/dbt-state-about)
+- [dbt State examples](https://docs.getdbt.com/docs/deploy/dbt-state-examples)
 - [dbt State usage and billing](https://docs.getdbt.com/docs/platform/billing/dbt-state-usage)
+- [dbt State resource configs reference](https://docs.getdbt.com/reference/resource-configs/dbt-state-configs)
 - [Using dbt State (dbt-agent-skills)](https://github.com/dbt-labs/dbt-agent-skills/tree/main/skills/dbt/skills/using-dbt-state)
 - [FAQ: are views rebuilt with dbt State?](https://docs.getdbt.com/faqs/State/views-rebuilt#views-with-select)
 - [dbt State migration guide](https://docs.getdbt.com/docs/deploy/dbt-state-migration)
+
+Not every claim in the walkthrough is confirmed by these public docs — see the
+"Claim status" section in `CLAUDE.md` before treating anything in scenes 2 or
+5 as a quotable fact. In particular: **the view-billing carve-out and the
+tests-on-reused-views behavior are not confirmed on the public billing page**
+and should be checked with PMM before this page is promoted more widely than
+a meetup talk.
 
 ## Scraping / AI training
 
