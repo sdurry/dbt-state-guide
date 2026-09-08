@@ -1073,7 +1073,7 @@ function go(i, fromHash){
 
 $('prev').onclick = ()=> go(idx-1);
 $('next').onclick = ()=> go(idx+1);
-$('run').onclick = runScene;
+$('run').onclick = ()=> runScene();
 
 document.addEventListener('keydown', e=>{
   if(e.target.tagName === 'BUTTON' && e.key === ' ') return;
