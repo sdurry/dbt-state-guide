@@ -545,10 +545,10 @@ const CONFIGS = [
    here:'mart_customer_360 has three parents. Only fct_orders actually rebuilt: fct_payments\' source data landed too, but it stayed inside lag_tolerance so it never rebuilt, and only a rebuilt parent counts as fresh. One fresh parent is enough at the default any. Switch to all and mart waits on fct_payments and dim_customers as well.'},
   {key:'evaluate_volatile_sql', def:false, opts:[false,true], scope:'model',
    what:'Store and compare the runtime output of volatile functions instead of just the function name.',
-   here:'int_order_items selects current_timestamp(). This is the one dial here that costs you more: switch it on and the model rebuilds every run by design.'},
+   here:'int_payments selects current_timestamp(). This is the one dial here that costs you more: switch it on and the model rebuilds every run by design — even though fct_payments underneath it stays a plain reuse, since raw.payments\' data is still inside lag_tolerance.'},
   {key:'allow_clones', def:true, opts:[true,false], scope:'profile',
    what:'Whether dbt State may clone into a target at all. Set false on prod to stop dev or CI tables being cloned into production.',
-   here:'A merge job rebuilt int_order_items in the CI schema 10 minutes ago, same logic, fresher data. dbt State would rather clone that than recompute. Set false and prod recomputes it instead.'},
+   here:'No effect in this run: there\'s no fresher copy sitting in another schema this time. This is what actually clones stg_orders, int_order_items and fct_orders into her dev schema in scene 5, "State on, dev." Set it false there and she rebuilds all three from scratch instead.'},
   {key:'execute_hooks_on_any_reuse', def:false, opts:[false,true], scope:'model',
    what:'Run pre- and post-hooks even when a node is reused instead of built.',
    here:'dim_customers carries a post-hook that grants select. At the default a skipped model runs no hooks, so grants quietly drift.'},
@@ -573,19 +573,21 @@ function evaluateTuning(cfgIn){
     const ps = PARENTS[id], freshPs = ps.filter(p=>fresh[p]);
     const gate = c.require_fresh_data_from==='all' ? freshPs.length===ps.length : freshPs.length>0;
     const pastLag = pastLagFor(id);
+    const dataReady = gate && pastLag;
+    const isView = NODE[id].type === 'view';
     const logic = (id==='stg_payments' && !c.compare_unrendered_code)
         ? "rendered SQL changed, env_var('AIRFLOW_RUN_ID')"
-      : (id==='int_items' && c.evaluate_volatile_sql)
+      : (id==='int_payments' && c.evaluate_volatile_sql)
         ? 'volatile current_timestamp() now compared by value'
       : null;
-    const ciCandidate = (id==='int_items' && !logic);
 
     let a, why;
     if(logic){ a='build'; why=logic; }
-    else if(gate && pastLag){
-      if(ciCandidate && c.allow_clones){ a='clone'; why='fresher copy in the CI schema, same logic'; }
-      else if(ciCandidate){ a='build'; why='allow_clones is false, the CI copy cannot be used'; }
-      else if(id==='mart'){ a='build'; why=`enough parents fresh (require_fresh_data_from: ${c.require_fresh_data_from})`; }
+    else if(isView && dataReady){
+      a='reuse'; why='a view stores nothing to rebuild — reused in place, but its test still runs against the live data';
+    }
+    else if(dataReady){
+      if(id==='mart'){ a='build'; why=`enough parents fresh (require_fresh_data_from: ${c.require_fresh_data_from})`; }
       else { a='build'; why=`fresh parent data, ${SRC_AGE[LANE_SRC[id]]}m past lag_tolerance ${c.lag_tolerance}`; }
     }
     else {
@@ -595,7 +597,7 @@ function evaluateTuning(cfgIn){
           : 'logic and upstream data unchanged';
     }
     nodes[id]=a; reasons[id]=why;
-    fresh[id] = (a==='build' || a==='clone');
+    fresh[id] = logic ? true : dataReady;
 
     if(id==='dim_customers' && a==='reuse'){
       if(c.execute_hooks_on_any_reuse){
@@ -1095,6 +1097,14 @@ function runScene(instant){
 function noteDatt(id, scene, kind){
   if(!BILLABLE(id)){ live.freeReuses++; return; }
   const key = scene.ledger + ':' + id;
+  if(scene.tuning){
+    /* the tuning scene is a sandbox for hypothetical configs, not a real run in
+       the day's story — preview against the committed ledger without writing
+       to it, so exploring configs never inflates the account-wide total */
+    if(ledger.has(key)){ live.oldDatts++; }
+    else { live.newDatts++; live.datt.add(id); }
+    return;
+  }
   ledgerKind[key] = kind;
   if(ledger.has(key)){ live.oldDatts++; }
   else { ledger.add(key); live.newDatts++; live.datt.add(id); }
