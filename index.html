@@ -189,7 +189,10 @@
   .ledger{padding:12px 16px; border-bottom:1px solid var(--rule)}
   .ledger h2{margin:0 0 3px; font-size:.85em; font-weight:600}
   .ledger p{margin:0 0 8px; font-size:.78em; color:var(--fg-faint)}
-  .pips{display:flex; flex-wrap:wrap; gap:3px}
+  .ledgergroup{margin-top:10px}
+  .ledgergroup:first-of-type{margin-top:0}
+  .ledgerlbl{font-size:.72em; letter-spacing:.02em; margin:0 0 4px}
+  .pips{display:flex; flex-wrap:wrap; gap:3px; min-height:11px}
   .pip{width:11px; height:11px; border-radius:2px; background:var(--datt)}
   .pip.old{background:transparent; border:1px solid #6B5A2C}
 
@@ -304,7 +307,18 @@
       <div class="ledger">
         <h2 id="ledgerTitle">Today's DATT ledger</h2>
         <p id="ledgerSub">Nothing reused yet.</p>
-        <div class="pips" id="pips"></div>
+        <div class="ledgergroup">
+          <p class="ledgerlbl" id="pipsSkipLbl">Models skipped</p>
+          <div class="pips" id="pipsSkip"></div>
+        </div>
+        <div class="ledgergroup">
+          <p class="ledgerlbl" id="pipsCloneLbl">Models cloned</p>
+          <div class="pips" id="pipsClone"></div>
+        </div>
+        <div class="ledgergroup">
+          <p class="ledgerlbl" id="pipsTestLbl">Tests reused</p>
+          <div class="pips" id="pipsTest"></div>
+        </div>
       </div>
     </aside>
   </main>
@@ -615,15 +629,16 @@ function tally(scene){
   return t;
 }
 
+/* kind: 'skip' = model reused in place, 'clone' = model cloned, 'test' = test reused */
 function dattKeys(scene){
   const keys = [];
   ALL_MODELS.forEach(id=>{
     const a = scene.nodes[id];
-    if((a==='reuse'||a==='clone') && BILLABLE(id)) keys.push(scene.ledger+':'+id);
+    if((a==='reuse'||a==='clone') && BILLABLE(id)) keys.push({key:scene.ledger+':'+id, kind: a==='clone' ? 'clone' : 'skip'});
   });
   TESTS.forEach(x=>{
     const a = scene.tests[x.id];
-    if(a==='reuse'||a==='reusefail') keys.push(scene.ledger+':'+x.id);
+    if(a==='reuse'||a==='reusefail') keys.push({key:scene.ledger+':'+x.id, kind:'test'});
   });
   return keys;
 }
@@ -744,7 +759,14 @@ function paint(nodeStates, testStates, dattSet){
   });
   TESTS.forEach(t=>{
     const s = dag.querySelector(`.tick[data-id="${t.id}"]`);
-    s.setAttribute('data-t', testStates[t.id] || 'pending');
+    const a2 = testStates[t.id] || 'pending';
+    s.setAttribute('data-t', a2);
+    const dot = dag.querySelector(`.tdatt[data-id="${t.id}"]`);
+    const isDatt = (a2==='reuse'||a2==='reusefail') && dattSet.has(t.id);
+    if(isDatt && !dot){
+      const tx = +s.getAttribute('x'), ty = +s.getAttribute('y');
+      dag.appendChild(el('circle',{class:'datt-dot tdatt', 'data-id':t.id, cx:tx+10, cy:ty+2, r:2.3}));
+    } else if(!isDatt && dot){ dot.remove(); }
   });
   EDGES.forEach(([a,b])=>{
     const p = dag.querySelector(`.edge[data-from="${a}"][data-to="${b}"]`);
@@ -765,6 +787,7 @@ function renderSourceAges(scene){
 ----------------------------------------------------------------*/
 let idx = 0;
 let ledgers = {prod:new Set(), dev:new Set()};
+let ledgerKind = {};
 const blankLive = () => ({nodes:{}, tests:{}, datt:new Set(), newDatts:0, oldDatts:0, freeReuses:0, done:false});
 let live = blankLive();
 let timers = [];
@@ -774,7 +797,7 @@ function seedLedger(i){
   const s = SCENES[i];
   const carried = new Set();
   for(let j=0; j<i; j++){
-    if(SCENES[j].ledger === s.ledger) dattKeys(SCENES[j]).forEach(k=>carried.add(k));
+    if(SCENES[j].ledger === s.ledger) dattKeys(SCENES[j]).forEach(({key,kind})=>{ carried.add(key); ledgerKind[key] = kind; });
   }
   ledgers[s.ledger] = carried;
 }
@@ -852,15 +875,23 @@ function renderLedger(scene){
   const total = ledgers[scene.ledger].size;
   $('ledgerTitle').textContent = scene.env==='prod'
     ? "Today's DATT ledger, production" : "Today's DATT ledger, her dev schema";
-  const pips = $('pips');
-  pips.innerHTML = '';
   const keys = [...ledgers[scene.ledger]];
-  keys.forEach(k=>{
-    const d = document.createElement('div');
-    d.className = 'pip' + (live.datt.has(k.split(':')[1]) ? '' : ' old');
-    d.title = k.split(':')[1];
-    pips.appendChild(d);
-  });
+  const groups = {skip:[], clone:[], test:[]};
+  keys.forEach(k=>{ (groups[ledgerKind[k]] || groups.skip).push(k); });
+  const fillGroup = (boxId, lblId, label, list)=>{
+    const box = $(boxId);
+    box.innerHTML = '';
+    list.forEach(k=>{
+      const d = document.createElement('div');
+      d.className = 'pip' + (live.datt.has(k.split(':')[1]) ? '' : ' old');
+      d.title = k.split(':')[1];
+      box.appendChild(d);
+    });
+    $(lblId).textContent = `${label} · ${list.length}`;
+  };
+  fillGroup('pipsSkip', 'pipsSkipLbl', 'Models skipped', groups.skip);
+  fillGroup('pipsClone', 'pipsCloneLbl', 'Models cloned', groups.clone);
+  fillGroup('pipsTest', 'pipsTestLbl', 'Tests reused', groups.test);
   $('ledgerSub').textContent = !total
     ? 'Nothing reused yet.'
     : live.done
@@ -975,8 +1006,8 @@ function runScene(instant){
         const label = `${n.type==='snapshot'?'snapshot':n.type==='view'?'sql view model':'sql table model'} ${scene.env}.${n.name}`;
         const why = scene.reasons && scene.reasons[id];
         if(a==='build') logLine(`${counter} of ${totalNodes} OK created ${label} <span class="bl">[${why || 'SUCCESS'}]</span>`, '');
-        else if(a==='reuse'){ noteDatt(id, scene); logLine(`${counter} of ${totalNodes} REUSE ${label} <span class="ok">[${why || 'REUSED, logic unchanged'}${BILLABLE(id)?'':', free, view'}]</span>`, ''); }
-        else if(a==='clone'){ noteDatt(id, scene); logLine(`${counter} of ${totalNodes} CLONE ${label} <span class="ok">[${why || 'CLONED from production'}${BILLABLE(id)?'':', free, view'}]</span>`, ''); }
+        else if(a==='reuse'){ noteDatt(id, scene, 'skip'); logLine(`${counter} of ${totalNodes} REUSE ${label} <span class="ok">[${why || 'REUSED, logic unchanged'}${BILLABLE(id)?'':', free, view'}]</span>`, ''); }
+        else if(a==='clone'){ noteDatt(id, scene, 'clone'); logLine(`${counter} of ${totalNodes} CLONE ${label} <span class="ok">[${why || 'CLONED from production'}${BILLABLE(id)?'':', free, view'}]</span>`, ''); }
         else if(a==='blocked') logLine(`${counter} of ${totalNodes} SKIP ${label} <span class="er">[SKIPPED, upstream test failed]</span>`, '');
       } else {
         logLine(a==='fresh'
@@ -994,8 +1025,8 @@ function runScene(instant){
         counter++;
         if(a2==='run') logLine(`${counter} of ${totalNodes} PASS ${t.name}`, '');
         else if(a2==='fail') logLine(`${counter} of ${totalNodes} FAIL ${t.name} <span class="er">[38 rows with a negative order_total]</span>`, 'er');
-        else if(a2==='reuse'){ noteDatt(t.id, scene); logLine(`${counter} of ${totalNodes} REUSE ${t.name} <span class="ok">[previous result reused]</span>`, ''); }
-        else if(a2==='reusefail'){ noteDatt(t.id, scene); logLine(`${counter} of ${totalNodes} REUSE ${t.name} <span class="er">[previous result reused, still FAIL: 38 rows]</span>`, 'er'); }
+        else if(a2==='reuse'){ noteDatt(t.id, scene, 'test'); logLine(`${counter} of ${totalNodes} REUSE ${t.name} <span class="ok">[previous result reused]</span>`, ''); }
+        else if(a2==='reusefail'){ noteDatt(t.id, scene, 'test'); logLine(`${counter} of ${totalNodes} REUSE ${t.name} <span class="er">[previous result reused, still FAIL: 38 rows]</span>`, 'er'); }
         else if(a2==='blocked') logLine(`${counter} of ${totalNodes} SKIP ${t.name}`, '');
         paint(live.nodes, live.tests, live.datt);
         renderLedger(scene);
@@ -1030,9 +1061,10 @@ function runScene(instant){
   steps.forEach((fn,i)=> timers.push(setTimeout(fn, Math.floor(i/THREADS)*gap)));
 }
 
-function noteDatt(id, scene){
+function noteDatt(id, scene, kind){
   if(!BILLABLE(id)){ live.freeReuses++; return; }
   const key = scene.ledger + ':' + id;
+  ledgerKind[key] = kind;
   if(ledgers[scene.ledger].has(key)){ live.oldDatts++; }
   else { ledgers[scene.ledger].add(key); live.newDatts++; live.datt.add(id); }
 }
