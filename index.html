@@ -416,20 +416,20 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'With dbt State, only the lane with new data rebuilds',
-    premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane hasn\'t moved in days and the payments lane is mid-cycle, so both are reused in place — reuse is what a DATT counts, regardless of why the data didn\'t change.',
+    premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane hasn\'t moved in days, so it\'s reused in place. The payments lane is mid-cycle — its tables are reused too, but stg_payments itself rebuilds every run regardless, a quirk in its code the tuning tab unpacks later — reuse is what a DATT counts, regardless of why the data didn\'t change.',
     ledger:'prod',
     srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d', src_payments:'landed 50m ago'},
     nodes:{
       src_orders:'fresh', src_customers:'stale', src_payments:'stale',
       stg_orders:'reuse', int_items:'build', fct_orders:'build',
       stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse',
-      stg_payments:'reuse', int_payments:'reuse', fct_payments:'reuse', mart:'build'
+      stg_payments:'build', int_payments:'reuse', fct_payments:'reuse', mart:'build'
     },
-    tests:{t1:'run',t2:'run',t3:'run',t4:'run',t5:'reuse',t6:'reuse',t7:'reuse',t8:'run',t9:'run',t10:'reuse',t11:'reuse',t12:'reuse'},
+    tests:{t1:'run',t2:'run',t3:'run',t4:'run',t5:'reuse',t6:'reuse',t7:'reuse',t8:'run',t9:'run',t10:'run',t11:'reuse',t12:'reuse'},
     perDay:5,
     notes:[
       ['Views are reused, and never billed','stg_orders sits on the fresh source, but a view stores nothing: it reads the new rows when queried, so unchanged logic means no rebuild. Views are also excluded from DATTs whether they are skipped or cloned. Their tests are billed as normal.'],
-      ['Reuse is the unit you pay for','Thirteen nodes were handed back instead of executed, but only ten are DATTs: the three views are free. The snapshot counts like any other relation, and so does every distinct test.', true],
+      ['Reuse is the unit you pay for','Eleven nodes were handed back instead of executed, but only nine are DATTs: the two views are free. The snapshot counts like any other relation, and so does every distinct test.', true],
       ['Freshness is a live warehouse check, not memory','Each run, dbt State reads last-modified timestamps for upstream tables straight from warehouse metadata (like INFORMATION_SCHEMA), not from what it built last time. The age next to each source above is that check — how long since the data actually changed.']
     ]
   },
@@ -438,14 +438,14 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'Second run of the day: same reuse, no new DATTs, one red test',
-    premise:'Three hours later the job runs again. The customer lane and the payments view are reused again — you already paid for each of them once today, so the DATT bill doesn\'t move — but the payments tables now have their own batch to catch up on, right alongside orders. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
+    premise:'Three hours later the job runs again. The customer lane is reused again — you already paid for it once today, so the DATT bill doesn\'t move — and the payments tables now have their own batch to catch up on, right alongside orders. stg_payments rebuilds again too, the same quirk as last run. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
     ledger:'prod',
     srcAge:{src_orders:'landed 15m ago', src_customers:'unchanged 3d', src_payments:'landed 25m ago'},
     nodes:{
       src_orders:'fresh', src_customers:'stale', src_payments:'fresh',
       stg_orders:'reuse', int_items:'build', fct_orders:'build',
       stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse',
-      stg_payments:'reuse', int_payments:'build', fct_payments:'build', mart:'blocked'
+      stg_payments:'build', int_payments:'build', fct_payments:'build', mart:'blocked'
     },
     tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'reuse',t6:'reuse',t7:'reuse',t8:'blocked',t9:'blocked',t10:'run',t11:'run',t12:'run'},
     notes:[
