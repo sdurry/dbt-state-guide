@@ -214,6 +214,7 @@
   /* tuning panel */
   .cfg{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:0 clamp(14px,2vw,28px);
        align-content:start; max-height:38vh; overflow:auto}
+  .cfgpanel{padding:10px 16px 4px; border-bottom:1px solid var(--rule); overflow:auto; max-height:34vh; display:none}
   .cfgrow{border-top:1px solid var(--rule-soft)}
   .cfghead{
     width:100%; display:flex; align-items:center; gap:10px; text-align:left;
@@ -297,6 +298,7 @@
       <div class="runbar">
         <button class="run" id="run">Run this scene</button>
       </div>
+      <div class="cfgpanel" id="cfgpanel"></div>
       <div class="meters" id="meters"></div>
       <div class="ledger">
         <h2 id="ledgerTitle">Today's DATT ledger</h2>
@@ -846,7 +848,14 @@ function logLine(html, cls){
 }
 
 function renderNotes(scene){
-  if(scene.tuning){ renderConfigPanel(); return; }
+  document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
+  if(scene.tuning){
+    $('notes').style.display = 'none';
+    renderConfigPanel();
+    return;
+  }
+  $('cfgpanel').style.display = 'none';
+  $('notes').style.display = '';
   $('notes').className = 'notes';
   $('notes').innerHTML = scene.notes.map(([h,b,key])=>`
     <div class="note${key?' key':''}"><div class="bar"></div><div><b>${h}.</b> ${b}</div></div>`).join('');
@@ -856,8 +865,8 @@ let openCfg = null;
 const shown = v => typeof v === 'boolean' ? String(v) : v;
 
 function renderConfigPanel(){
-  const box = $('notes');
-  box.className = 'notes cfg';
+  const box = $('cfgpanel');
+  box.style.display = 'block';
   box.innerHTML = CONFIGS.map(c=>{
     const cur = cfg[c.key], isDef = cur === c.def, open = openCfg === c.key;
     return `<div class="cfgrow">
@@ -1018,7 +1027,7 @@ function go(i, fromHash){
   renderNotes(s);
   live = blankLive();
   $('log').innerHTML = '';
-  logLine('Press <span class="bl">Run this scene</span> to execute.', 'hd');
+  if(!s.tuning) logLine('Press <span class="bl">Run this scene</span> to execute.', 'hd');
   paint({src_orders:s.nodes.src_orders, src_customers:s.nodes.src_customers}, {}, new Set());
   renderMeters(s, false);
   renderLedger(s);
