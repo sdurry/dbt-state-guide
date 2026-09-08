@@ -502,7 +502,7 @@ const SCENES = [
     cmd:'dbt build',
     title:'The dials, and what each one actually does',
     premise:'It\'s later the same afternoon. The fix from scene 3 merged clean, and this run doesn\'t trip a single test. raw.orders landed 90 minutes ago and raw.payments landed a batch 20 minutes ago; the customer side still hasn\'t moved in three days. A CI merge job also left a fresher int_order_items behind 10 minutes ago. Every config below sits at its documented default. Open one, change it, and the run re-evaluates as you go.',
-    ledger:'tune',
+    ledger:'prod',
     tuning:true,
     perDay:5,
     nodes:{}, tests:{},
