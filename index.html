@@ -931,6 +931,7 @@ function renderNotes(scene){
   document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
   $('log').style.display = scene.tuning ? 'none' : '';
   $('meters').style.display = scene.tuning ? 'none' : '';
+  document.querySelector('.ledger').style.display = scene.tuning ? 'none' : '';
   if(scene.tuning){
     $('notes').style.display = 'none';
     renderConfigPanel();
