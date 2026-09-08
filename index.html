@@ -312,7 +312,7 @@
   <div class="notes" id="notes"></div>
   <div class="foot">
     Illustrative figures, not a quote: $0.20 per model built and $0.05 per test query as a stand-in for warehouse compute, $0.094 per DATT.
-    Durations are indicative. Move with <kbd>←</kbd> <kbd>→</kbd>, run with <kbd>R</kbd>.
+    Durations are indicative, and the run animation batches steps four at a time to suggest this profile's thread count (4) — not a real scheduler. Move with <kbd>←</kbd> <kbd>→</kbd>, run with <kbd>R</kbd>.
   </div>
 </div>
 
@@ -370,6 +370,7 @@ const BILLABLE = id => !(NODE[id] && NODE[id].type === 'view');
 /* cost + duration model (illustrative) */
 const C = {build:0.20, test:0.05, clone:0.01, datt:0.094};
 const T = {build:25, test:8, clone:2, reuse:0.3};
+const THREADS = 4; /* the animation batches this many steps per tick to suggest concurrency; not a real scheduler */
 
 /* ---------------------------------------------------------------
    Scenes
@@ -960,7 +961,7 @@ function runScene(instant){
     const parts = NODES.filter(n=>n.type==='source' && ages[n.id]).map(n=>`${n.name} ${ages[n.id]}`);
     logLine(`dbt State: checking warehouse metadata — ${parts.length ? parts.join(', ') : 'fetching for 19 nodes'}`, 'hd');
   }
-  logLine(`Concurrency: 4 threads (target='${scene.env}')`, 'hd');
+  logLine(`Concurrency: ${THREADS} threads (target='${scene.env}')`, 'hd');
   logLine('&nbsp;');
 
   ORDER.forEach(id=>{
@@ -1026,7 +1027,7 @@ function runScene(instant){
   });
 
   const gap = (reduced || instant) ? 0 : 210;
-  steps.forEach((fn,i)=> timers.push(setTimeout(fn, i*gap)));
+  steps.forEach((fn,i)=> timers.push(setTimeout(fn, Math.floor(i/THREADS)*gap)));
 }
 
 function noteDatt(id, scene){
