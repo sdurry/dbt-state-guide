@@ -193,7 +193,7 @@
   .pip{width:11px; height:11px; border-radius:2px; background:var(--datt)}
   .pip.old{background:transparent; border:1px solid #6B5A2C}
 
-  .log{flex:1; overflow:auto; padding:12px 16px 26px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
+  .log{max-height:240px; overflow:auto; padding:12px 16px 26px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
   .log div{white-space:pre-wrap; word-break:break-word; color:var(--fg-dim)}
   .log .ok{color:var(--reuse)}
   .log .bl{color:var(--burn)}
@@ -284,6 +284,10 @@
   <main>
     <section class="stage">
       <svg class="dag" id="dag" viewBox="0 0 1040 400" role="img" aria-label="dbt project lineage graph"></svg>
+      <div class="runbar">
+        <button class="run" id="run">Run this scene</button>
+      </div>
+      <div class="log" id="log"></div>
       <div class="legend">
         <span><i class="sw b"></i>built, warehouse compute</span>
         <span><i class="sw r"></i>reused in place</span>
@@ -295,9 +299,6 @@
     </section>
 
     <aside>
-      <div class="runbar">
-        <button class="run" id="run">Run this scene</button>
-      </div>
       <div class="cfgpanel" id="cfgpanel"></div>
       <div class="meters" id="meters"></div>
       <div class="ledger">
@@ -305,7 +306,6 @@
         <p id="ledgerSub">Nothing reused yet.</p>
         <div class="pips" id="pips"></div>
       </div>
-      <div class="log" id="log"></div>
     </aside>
   </main>
 
@@ -1054,6 +1054,7 @@ function go(i, fromHash){
   $('env').textContent = s.envLabel;
   $('env').className = 'env ' + s.env;
   $('cmd').textContent = s.cmd;
+  $('run').textContent = s.cmd;
   $('title').textContent = s.title;
   $('premise').textContent = s.premise;
   $('prev').disabled = idx===0;
@@ -1061,7 +1062,7 @@ function go(i, fromHash){
   renderNotes(s);
   live = blankLive();
   $('log').innerHTML = '';
-  if(!s.tuning) logLine('Press <span class="bl">Run this scene</span> to execute.', 'hd');
+  if(!s.tuning) logLine(`Press <span class="bl">${s.cmd}</span> to execute.`, 'hd');
   const srcStates = Object.fromEntries(NODES.filter(n=>n.type==='source').map(n=>[n.id, s.nodes[n.id]]));
   paint(srcStates, {}, new Set());
   renderMeters(s, false);
