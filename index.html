@@ -970,9 +970,8 @@ const ORDER = ['src_orders','src_customers','src_payments','stg_orders','stg_cus
 function runScene(instant){
   const scene = SCENES[idx];
   clearTimers();
-  if(scene.tuning) applyTuning(scene);
+  if(scene.tuning){ applyTuning(scene); seedLedger(idx); }
   renderSourceAges(scene);
-  seedLedger(idx);
   $('log').innerHTML = '';
   live = blankLive();
   $('run').disabled = true;
