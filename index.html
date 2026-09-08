@@ -446,9 +446,9 @@ const SCENES = [
       stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse',
       stg_payments:'reuse', int_payments:'build', fct_payments:'build', mart:'blocked'
     },
-    tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'reuse',t6:'reuse',t7:'reuse',t8:'blocked',t9:'blocked',t10:'reuse',t11:'run',t12:'run'},
+    tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'reuse',t6:'reuse',t7:'reuse',t8:'blocked',t9:'blocked',t10:'run',t11:'run',t12:'run'},
     notes:[
-      ['A DATT is charged once per day','Every reuse after the first is free. The more often the job runs, the further the same six DATTs are amortised — this is why hourly jobs save far more than daily ones.', true],
+      ['A DATT is charged once per day','Every reuse after the first is free. The more often the job runs, the further the same five DATTs are amortised — this is why hourly jobs save far more than daily ones.', true],
       ['Bad data stops at the gate','assert_order_total_positive fails, so mart_customer_360 and its two tests never run. Someone gets paged, and the next two scenes are her afternoon.']
     ]
   },
