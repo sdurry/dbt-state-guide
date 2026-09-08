@@ -56,8 +56,8 @@
     background:linear-gradient(180deg,#101E2B,var(--ink));
   }
   .brandrow{display:flex; align-items:baseline; gap:16px; flex-wrap:wrap}
-  .brand{font-size:1.05em; font-weight:650; letter-spacing:-.015em}
-  .brand b{color:var(--burn); font-weight:650}
+  .brand{font-size:1.1em; font-weight:650; letter-spacing:-.015em}
+  .brand b{color:var(--burn); font-weight:800; letter-spacing:-.03em}
   .brandnote{color:var(--fg-faint); font-size:.82em}
   .steps{display:flex; gap:2px; margin:12px 0 0; flex-wrap:wrap}
   .step{
@@ -171,9 +171,9 @@
   .runbar{padding:14px 16px; border-bottom:1px solid var(--rule)}
   button.run{width:100%}
   button.run{
-    flex:1; font-family:var(--sans); font-weight:600; font-size:.95em;
-    color:#1A0C08; background:var(--burn); border:none; border-radius:var(--r);
-    padding:10px 14px; cursor:pointer;
+    flex:1; font-family:var(--sans); font-weight:700; font-size:.95em;
+    color:#1A0C08; background:var(--burn); border:none; border-radius:999px;
+    padding:10px 14px; cursor:pointer; letter-spacing:-.01em;
   }
   button.run:hover{background:#FF7E63}
   button.run:disabled{background:#4A2C25; color:#9A776E; cursor:default}
@@ -204,13 +204,14 @@
   .log .hd{color:var(--fg-faint)}
   .log .sum{color:var(--fg); border-top:1px solid var(--rule-soft); margin-top:8px; padding-top:8px}
 
-  /* ---------- notes strip ---------- */
+  /* ---------- notes (right rail) ---------- */
   .notes{
-    border-top:1px solid var(--rule); background:var(--panel);
-    padding:14px clamp(16px,2.2vw,32px);
-    display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:clamp(14px,2vw,30px);
+    padding:12px 16px 14px; border-top:1px solid var(--rule);
+    display:flex; flex-direction:column; gap:11px;
+    flex:1; min-height:0; overflow:auto;
   }
-  .notes .note{display:flex; gap:10px; font-size:.86em; color:var(--fg-dim); max-width:62ch}
+  .notes .hint{margin:0; font-size:.78em; color:var(--fg-faint)}
+  .notes .note{display:flex; gap:9px; font-size:.82em; color:var(--fg-dim)}
   .notes .note b{color:var(--fg); font-weight:600}
   .notes .bar{width:2px; background:var(--rule); flex:none; border-radius:2px}
   .notes .note.key .bar{background:var(--datt)}
@@ -321,10 +322,10 @@
           <div class="pips" id="pipsTest"></div>
         </div>
       </div>
+      <div class="notes" id="notes"></div>
     </aside>
   </main>
 
-  <div class="notes" id="notes"></div>
   <div class="foot">
     Illustrative figures, not a quote: $0.20 per model built and $0.05 per test query as a stand-in for warehouse compute, $0.094 per DATT.
     Durations are indicative, and the run animation batches steps four at a time to suggest this profile's thread count (4) — not a real scheduler. Move with <kbd>←</kbd> <kbd>→</kbd>, run with <kbd>R</kbd>.
@@ -927,21 +928,25 @@ function logLine(html, cls){
   $('log').scrollTop = $('log').scrollHeight;
 }
 
-function renderNotes(scene){
+function renderNotes(scene, show){
   document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
   $('log').style.display = scene.tuning ? 'none' : '';
   $('meters').style.display = scene.tuning ? 'none' : '';
   document.querySelector('.ledger').style.display = scene.tuning ? 'none' : '';
-  if(scene.tuning){
-    $('notes').style.display = 'none';
+  const box = $('notes');
+  if(scene.tuning || !scene.notes.length){
+    box.style.display = 'none';
+    box.innerHTML = '';
     renderConfigPanel();
     return;
   }
   $('cfgpanel').style.display = 'none';
-  $('notes').style.display = '';
-  $('notes').className = 'notes';
-  $('notes').innerHTML = scene.notes.map(([h,b,key])=>`
-    <div class="note${key?' key':''}"><div class="bar"></div><div><b>${h}.</b> ${b}</div></div>`).join('');
+  box.style.display = '';
+  box.className = 'notes';
+  box.innerHTML = show
+    ? scene.notes.map(([h,b,key])=>`
+        <div class="note${key?' key':''}"><div class="bar"></div><div><b>${h}.</b> ${b}</div></div>`).join('')
+    : `<p class="hint">Run this scene to see what's driving it.</p>`;
 }
 
 let openCfg = null;
@@ -1012,6 +1017,7 @@ function runScene(instant){
   $('run').disabled = true;
   paint({}, {}, new Set());
   renderMeters(scene, false);
+  renderNotes(scene, false);
 
   const inScope = a => a && a !== 'pending';
   const totalNodes = ALL_MODELS.filter(id=>inScope(scene.nodes[id])).length
@@ -1089,6 +1095,7 @@ function runScene(instant){
     $('run').disabled = false;
     renderMeters(scene, true);
     renderLedger(scene);
+    renderNotes(scene, true);
   });
 
   const gap = (reduced || instant) ? 0 : 550;
@@ -1134,7 +1141,7 @@ function go(i, fromHash){
   $('premise').textContent = s.premise;
   $('prev').disabled = idx===0;
   $('next').disabled = idx===SCENES.length-1;
-  renderNotes(s);
+  renderNotes(s, false);
   live = blankLive();
   $('log').innerHTML = '';
   if(!s.tuning) logLine(`Press <span class="bl">${s.cmd}</span> to execute.`, 'hd');
