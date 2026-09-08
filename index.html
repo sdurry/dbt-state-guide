@@ -217,7 +217,8 @@
   /* tuning panel */
   .cfg{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:0 clamp(14px,2vw,28px);
        align-content:start; max-height:38vh; overflow:auto}
-  .cfgpanel{padding:10px 16px 4px; border-bottom:1px solid var(--rule); overflow:auto; max-height:34vh; display:none}
+  .cfgpanel{padding:10px 16px 4px; border-bottom:1px solid var(--rule); overflow:auto; flex:1; min-height:0; display:none}
+  .cfgsummary{font-family:var(--mono); font-size:.82em; color:var(--datt); background:#241E0B; border:1px solid #574818; border-radius:var(--r); padding:8px 10px; margin-bottom:4px}
   .cfgrow{border-top:1px solid var(--rule-soft)}
   .cfghead{
     width:100%; display:flex; align-items:center; gap:10px; text-align:left;
@@ -500,7 +501,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'The dials, and what each one actually does',
-    premise:'Back in production, where these configs earn their keep. raw.orders landed 90 minutes ago, the customer side has not moved in three days, the payments lane hasn\'t produced a new batch since the top of the hour, and a CI merge job left a fresher int_order_items behind 20 minutes ago. Every config below sits at its documented default. Open one, change it, and the run re-evaluates as you go.',
+    premise:'It\'s later the same afternoon. The fix from scene 3 merged clean, and this run doesn\'t trip a single test. raw.orders landed 90 minutes ago and raw.payments landed a batch 20 minutes ago; the customer side still hasn\'t moved in three days. A CI merge job also left a fresher int_order_items behind 10 minutes ago. Every config below sits at its documented default. Open one, change it, and the run re-evaluates as you go.',
     ledger:'tune',
     tuning:true,
     perDay:5,
@@ -522,49 +523,59 @@ const CFG_DEFAULT = {
 };
 let cfg = {...CFG_DEFAULT};
 const LAG_MIN = {'45m':45, '4h':240, '7d':10080};
-const DATA_AGE = 90;   // minutes since raw.orders landed new rows
+/* minutes since each source last landed new rows; raw.customers is omitted
+   because it has no new data at all this run, not just data inside tolerance */
+const SRC_AGE = {src_orders:90, src_payments:20};
+/* fixed lane structure: which source is at the head of each non-mart node's lane */
+const LANE_SRC = {
+  stg_orders:'src_orders', int_items:'src_orders', fct_orders:'src_orders',
+  stg_customers:'src_customers', snap_tier:'src_customers', dim_customers:'src_customers',
+  stg_payments:'src_payments', int_payments:'src_payments', fct_payments:'src_payments'
+};
 
 const CONFIGS = [
   {key:'lag_tolerance', def:'45m', opts:['45m','4h','7d'], scope:'model',
    what:'How much time must pass since the last upstream data change before a node is eligible for a rebuild. Data freshness only: a SQL change rebuilds regardless.',
-   here:'raw.orders landed 90 minutes ago. Set the tolerance above that and the orders lane is not yet eligible, so it is skipped in place and prod stays 90 minutes behind on purpose.'},
+   here:'raw.orders landed 90 minutes ago, and the incremental fct_orders is the expensive thing sitting at the end of that lane. Set the tolerance above 90 minutes and the whole orders lane, fct_orders included, is not yet eligible, so it is skipped in place and prod stays 90 minutes behind on purpose.'},
   {key:'compare_unrendered_code', def:false, opts:[false,true], scope:'model',
    what:'Check the Jinja template as well as the rendered SQL. A rebuild then needs both to change, so values that differ every run stop invalidating the model.',
-   here:'stg_orders stamps env_var(\'AIRFLOW_RUN_ID\') into a column, so its rendered SQL differs on every single run. At the default it rebuilds every run and drags the lane behind it.'},
+   here:'stg_payments stamps env_var(\'AIRFLOW_RUN_ID\') into a column, so its rendered SQL differs on every single run. At the default it rebuilds every run regardless of how old raw.payments\' data is — turn this on and it drops back to the same lag_tolerance check as everything else.'},
   {key:'require_fresh_data_from', def:'any', opts:['any','all'], scope:'model',
    what:'Whether any or all direct parents need fresh data before a node is eligible for a rebuild.',
-   here:'mart_customer_360 has three parents. Only the orders side is fresh, so all holds the mart back until the customer and payments sides move too.'},
+   here:'mart_customer_360 has three parents. Only fct_orders actually rebuilt: fct_payments\' source data landed too, but it stayed inside lag_tolerance so it never rebuilt, and only a rebuilt parent counts as fresh. One fresh parent is enough at the default any. Switch to all and mart waits on fct_payments and dim_customers as well.'},
   {key:'evaluate_volatile_sql', def:false, opts:[false,true], scope:'model',
    what:'Store and compare the runtime output of volatile functions instead of just the function name.',
    here:'int_order_items selects current_timestamp(). This is the one dial here that costs you more: switch it on and the model rebuilds every run by design.'},
   {key:'allow_clones', def:true, opts:[true,false], scope:'profile',
    what:'Whether dbt State may clone into a target at all. Set false on prod to stop dev or CI tables being cloned into production.',
-   here:'A merge job rebuilt int_order_items in the CI schema 20 minutes ago, same logic, fresher data. dbt State would rather clone that than recompute. Set false and prod recomputes it instead.'},
+   here:'A merge job rebuilt int_order_items in the CI schema 10 minutes ago, same logic, fresher data. dbt State would rather clone that than recompute. Set false and prod recomputes it instead.'},
   {key:'execute_hooks_on_any_reuse', def:false, opts:[false,true], scope:'model',
    what:'Run pre- and post-hooks even when a node is reused instead of built.',
    here:'dim_customers carries a post-hook that grants select. At the default a skipped model runs no hooks, so grants quietly drift.'},
   {key:'pre_clone', def:'if_missing', opts:['never','if_missing','always'], scope:'model',
    what:'Whether dbt State pre-populates incremental models and snapshots by cloning production before a run.',
-   here:'No effect in this run: fct_orders already exists in the target schema. This one earns its keep in a fresh dev or CI schema, which is scene 5.'}
+   here:'No effect in this run: fct_orders (incremental) and snap_customer_tier (snapshot) already exist in the target schema. This one earns its keep in a fresh dev or CI schema, which is scene 5, "State on, dev."'}
 ];
 
 /* Production run. Every relation already exists in the target schema, so the
    fallback is a skip in place. A CI merge job left a fresher int_order_items
    behind, which is the only cross-schema clone candidate. */
-function evaluateTuning(){
-  const lag = LAG_MIN[cfg.lag_tolerance];
-  const pastLag = DATA_AGE >= lag;
-  const nodes = {src_orders:'fresh', src_customers:'stale', src_payments:'stale'};
+function evaluateTuning(cfgIn){
+  const c = cfgIn || cfg;
+  const lag = LAG_MIN[c.lag_tolerance];
+  const pastLagFor = id => id==='mart' ? true : (SRC_AGE[LANE_SRC[id]] || 0) >= lag;
+  const nodes = {src_orders:'fresh', src_customers:'stale', src_payments:'fresh'};
   const tests = {}, reasons = {};
   const extra = {queries:0, cost:0, secs:0, lines:[]};
-  const fresh = {src_orders:true, src_customers:false};
+  const fresh = {src_orders:true, src_customers:false, src_payments:true};
 
   ORDER.filter(id => NODE[id].type !== 'source').forEach(id=>{
     const ps = PARENTS[id], freshPs = ps.filter(p=>fresh[p]);
-    const gate = cfg.require_fresh_data_from==='all' ? freshPs.length===ps.length : freshPs.length>0;
-    const logic = (id==='stg_orders' && !cfg.compare_unrendered_code)
+    const gate = c.require_fresh_data_from==='all' ? freshPs.length===ps.length : freshPs.length>0;
+    const pastLag = pastLagFor(id);
+    const logic = (id==='stg_payments' && !c.compare_unrendered_code)
         ? "rendered SQL changed, env_var('AIRFLOW_RUN_ID')"
-      : (id==='int_items' && cfg.evaluate_volatile_sql)
+      : (id==='int_items' && c.evaluate_volatile_sql)
         ? 'volatile current_timestamp() now compared by value'
       : null;
     const ciCandidate = (id==='int_items' && !logic);
@@ -572,21 +583,22 @@ function evaluateTuning(){
     let a, why;
     if(logic){ a='build'; why=logic; }
     else if(gate && pastLag){
-      if(ciCandidate && cfg.allow_clones){ a='clone'; why='fresher copy in the CI schema, same logic'; }
+      if(ciCandidate && c.allow_clones){ a='clone'; why='fresher copy in the CI schema, same logic'; }
       else if(ciCandidate){ a='build'; why='allow_clones is false, the CI copy cannot be used'; }
-      else { a='build'; why=`fresh parent data, ${DATA_AGE}m past lag_tolerance ${cfg.lag_tolerance}`; }
+      else if(id==='mart'){ a='build'; why=`enough parents fresh (require_fresh_data_from: ${c.require_fresh_data_from})`; }
+      else { a='build'; why=`fresh parent data, ${SRC_AGE[LANE_SRC[id]]}m past lag_tolerance ${c.lag_tolerance}`; }
     }
     else {
       a='reuse';
-      why = freshPs.length && !gate ? 'require_fresh_data_from: all, the customer and payments sides are stale'
-          : freshPs.length && !pastLag ? `data is ${DATA_AGE}m old, inside lag_tolerance ${cfg.lag_tolerance}`
+      why = freshPs.length && !gate ? 'require_fresh_data_from: all, another parent is stale'
+          : freshPs.length && !pastLag ? `data is ${SRC_AGE[LANE_SRC[id]]}m old, inside lag_tolerance ${c.lag_tolerance}`
           : 'logic and upstream data unchanged';
     }
     nodes[id]=a; reasons[id]=why;
     fresh[id] = (a==='build' || a==='clone');
 
     if(id==='dim_customers' && a==='reuse'){
-      if(cfg.execute_hooks_on_any_reuse){
+      if(c.execute_hooks_on_any_reuse){
         extra.cost+=0.01; extra.secs+=2; extra.queries+=1;
         extra.lines.push(['ok', 'post-hook on dim_customers executed on reuse, grants applied']);
       } else {
@@ -596,8 +608,8 @@ function evaluateTuning(){
     TESTS.filter(t=>t.parent===id).forEach(t=>{ tests[t.id] = fresh[id] ? 'run' : 'reuse'; });
   });
 
-  extra.lines.push(['hd', `pre_clone: ${cfg.pre_clone} — no effect, every relation already exists in prod`]);
-  const srcAge = {src_orders:`landed ${DATA_AGE}m ago`, src_customers:'unchanged 3d', src_payments:'landed 50m ago'};
+  extra.lines.push(['hd', `pre_clone: ${c.pre_clone} — no effect, every relation already exists in prod`]);
+  const srcAge = {src_orders:`landed ${SRC_AGE.src_orders}m ago`, src_customers:'unchanged 3d', src_payments:`landed ${SRC_AGE.src_payments}m ago`};
   return {nodes, tests, reasons, extra, srcAge};
 }
 
@@ -903,7 +915,9 @@ function renderLedger(scene){
       : `${total} unique reuses carried over from earlier runs.`;
 }
 
+let logEnabled = true;
 function logLine(html, cls){
+  if(!logEnabled) return;
   const d = document.createElement('div');
   if(cls) d.className = cls;
   d.innerHTML = html;
@@ -913,6 +927,8 @@ function logLine(html, cls){
 
 function renderNotes(scene){
   document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
+  $('log').style.display = scene.tuning ? 'none' : '';
+  $('meters').style.display = scene.tuning ? 'none' : '';
   if(scene.tuning){
     $('notes').style.display = 'none';
     renderConfigPanel();
@@ -931,7 +947,18 @@ const shown = v => typeof v === 'boolean' ? String(v) : v;
 function renderConfigPanel(){
   const box = $('cfgpanel');
   box.style.display = 'block';
-  box.innerHTML = CONFIGS.map(c=>{
+
+  const cur = evaluateTuning(cfg);
+  const curT = tally({nodes:cur.nodes, tests:cur.tests});
+  const def = evaluateTuning(CFG_DEFAULT);
+  const defT = tally({nodes:def.nodes, tests:def.tests});
+  const curReused = curT.reuse + curT.clone;
+  const defReused = defT.reuse + defT.clone;
+  const diff = curReused - defReused;
+  const diffTxt = diff===0 ? 'same as the defaults' : diff>0 ? `${diff} more than the defaults` : `${-diff} fewer than the defaults`;
+  const summary = `<div class="cfgsummary">${curReused} of ${ALL_MODELS.length} models reused or cloned at these settings — ${diffTxt}.</div>`;
+
+  box.innerHTML = summary + CONFIGS.map(c=>{
     const cur = cfg[c.key], isDef = cur === c.def, open = openCfg === c.key;
     return `<div class="cfgrow">
       <button class="cfghead" data-cfg="${c.key}" aria-expanded="${open}">
@@ -974,6 +1001,7 @@ const ORDER = ['src_orders','src_customers','src_payments','stg_orders','stg_cus
 function runScene(instant){
   const scene = SCENES[idx];
   clearTimers();
+  logEnabled = !scene.tuning;
   if(scene.tuning){ applyTuning(scene); seedLedger(idx); }
   renderSourceAges(scene);
   $('log').innerHTML = '';
