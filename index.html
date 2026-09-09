@@ -104,14 +104,15 @@
     border-radius:var(--r); padding:5px 10px;
   }
   .cmd::before{content:"$ "; color:var(--fg-faint)}
-  .navbtns{display:flex; gap:8px; flex:none}
+  .navbtns{display:flex; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end}
   button.ghost{
     font-family:var(--sans); font-size:.85em; color:var(--fg-dim);
     background:transparent; border:1px solid var(--rule); border-radius:var(--r);
-    padding:7px 12px; cursor:pointer;
+    padding:7px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
   }
   button.ghost:hover:not(:disabled){color:var(--fg); border-color:#3A566D}
   button.ghost:disabled{opacity:.35; cursor:default}
+  button.ghost kbd{border-color:var(--rule); color:var(--fg-faint)}
 
   /* ---------- main ---------- */
   main{display:grid; grid-template-columns:minmax(0,1fr) clamp(290px,25vw,380px); flex:1}
@@ -184,13 +185,13 @@
 
   /* ---------- right rail ---------- */
   aside{border-left:1px solid var(--rule); background:var(--panel-2); display:flex; flex-direction:column; min-width:0}
-  .runbar{padding:14px 16px; border-bottom:1px solid var(--rule)}
-  button.run{width:100%}
   button.run{
-    flex:1; font-family:var(--sans); font-weight:700; font-size:.95em;
+    font-family:var(--sans); font-weight:700; font-size:.85em;
     color:#1A0C08; background:var(--burn); border:none; border-radius:999px;
-    padding:10px 14px; cursor:pointer; letter-spacing:-.01em;
+    padding:7px 16px; cursor:pointer; letter-spacing:-.01em;
+    display:inline-flex; align-items:center; gap:7px;
   }
+  button.run kbd{border-color:#1A0C08; color:#1A0C08; opacity:.75}
   button.run:hover{background:#FF7E63}
   button.run:disabled{background:#4A2C25; color:#9A776E; cursor:default}
 
@@ -268,7 +269,7 @@
   .cfgfoot{grid-column:1/-1; border-top:1px solid var(--rule-soft); margin-top:6px; padding-top:10px;
            display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:.84em; color:var(--fg-faint)}
   .foot{padding:8px clamp(16px,2.2vw,32px) 14px; font-size:.74em; color:var(--fg-faint); background:var(--panel)}
-  .foot kbd{font-family:var(--mono); border:1px solid var(--rule); border-radius:3px; padding:0 4px}
+  kbd{font-family:var(--mono); font-size:.85em; border:1px solid var(--rule); border-radius:3px; padding:0 4px; line-height:1.5}
 
   /* ---------- deep-dive modal ---------- */
   .deepdive-backdrop{
@@ -348,17 +349,15 @@
       <p class="premise" id="premise"></p>
     </div>
     <div class="navbtns">
-      <button class="ghost" id="prev">Back</button>
-      <button class="ghost" id="next">Next</button>
+      <button class="ghost" id="prev"><kbd>&larr;</kbd> Back</button>
+      <button class="run" id="run">Run this scene <kbd>R</kbd></button>
+      <button class="ghost" id="next">Next <kbd>&rarr;</kbd></button>
     </div>
   </div>
 
   <main>
     <section class="stage">
       <svg class="dag" id="dag" viewBox="0 0 1040 400" role="img" aria-label="dbt project lineage graph"></svg>
-      <div class="runbar">
-        <button class="run" id="run">Run this scene</button>
-      </div>
       <div class="log" id="log"></div>
       <div class="legend" id="legend">
         <span data-key="b"><i class="sw b"></i>built, warehouse compute</span>
@@ -1077,7 +1076,7 @@ function logLine(html, cls){
 }
 
 function renderNotes(scene, show){
-  document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
+  $('run').style.display = scene.tuning ? 'none' : '';
   $('log').style.display = scene.tuning ? 'none' : '';
   $('meters').style.display = scene.tuning ? 'none' : '';
   $('metersHead').style.display = scene.tuning ? 'none' : '';
