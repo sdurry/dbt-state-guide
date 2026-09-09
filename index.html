@@ -198,7 +198,7 @@
   .meters{padding:14px 16px; border-bottom:1px solid var(--rule); display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule-soft)}
   .m{background:var(--panel-2); padding:9px 10px}
   .m .k{font-size:.78em; color:var(--fg-faint); letter-spacing:.02em}
-  .m .v{font-family:var(--mono); font-size:clamp(17px,1.7vw,23px); line-height:1.25; letter-spacing:-.02em}
+  .m .v{font-family:var(--mono); font-size:clamp(15px,1.3vw,19px); line-height:1.25; letter-spacing:-.02em}
   .m.wide{grid-column:1/-1}
   .v.burn{color:var(--burn)} .v.reuse{color:var(--reuse)} .v.datt{color:var(--datt)}
   .m .sub{font-size:.78em; color:var(--fg-faint); font-family:var(--mono)}
@@ -217,14 +217,18 @@
   .logwrap{display:flex; flex-direction:column; min-height:0}
   .loghead{
     display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
-    background:none; border:none; padding:4px 2px 6px; cursor:pointer;
+    background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r);
+    padding:7px 10px; cursor:pointer; transition:background .12s, border-color .12s;
     font-family:var(--sans); font-size:.82em; font-weight:600; color:var(--fg-dim);
   }
-  .loghead:hover{color:var(--fg)}
+  .loghead:hover{color:var(--fg); background:#16283A; border-color:#3A566D}
+  .loghead:active{background:#1B2C3B}
   .loghead .chev{font-size:.75em; color:var(--fg-faint); transition:transform .15s}
   .logwrap.collapsed .chev{transform:rotate(-90deg)}
   .logwrap.collapsed .log{display:none}
-  .log{max-height:240px; overflow:auto; padding:0 16px 26px 2px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
+  .logwrap:not(.collapsed) .loghead{border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none}
+  .logwrap:not(.collapsed) .log{border:1px solid var(--rule); border-top:none; border-radius:0 0 var(--r) var(--r)}
+  .log{max-height:240px; overflow:auto; padding:10px 16px 20px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
   .log div{white-space:pre-wrap; word-break:break-word; color:var(--fg-dim)}
   .log .ok{color:var(--reuse)}
   .log .bl{color:var(--burn)}
