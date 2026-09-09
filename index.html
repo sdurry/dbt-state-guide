@@ -119,18 +119,12 @@
   svg.dag{width:100%; height:auto; display:block}
 
   .nodeOverlay{
-    position:absolute; max-width:min(340px,80vw); z-index:5;
+    position:absolute; max-width:min(340px,80vw); z-index:5; pointer-events:none;
     background:var(--panel); border:1px solid var(--rule); border-radius:var(--r);
-    box-shadow:0 8px 24px rgba(0,0,0,.4); padding:10px 34px 12px 12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4); padding:10px 12px 12px;
     font-size:.86em; color:var(--fg-dim); line-height:1.45;
   }
   .nodeOverlay[hidden]{display:none}
-  .nodeOverlay .close{
-    position:absolute; top:6px; right:6px; width:22px; height:22px; line-height:20px;
-    text-align:center; border:none; background:transparent; color:var(--fg-faint);
-    font-size:1em; cursor:pointer; border-radius:4px;
-  }
-  .nodeOverlay .close:hover{color:var(--fg); background:var(--panel-2)}
   .nodeOverlay .nm{display:block; margin:0 0 5px; font-family:var(--mono); font-size:.95em; color:var(--fg)}
 
   /* node visuals */
@@ -167,7 +161,7 @@
   .tick[data-t="blocked"]{fill:none; stroke:var(--blocked); stroke-dasharray:1 3}
   .tick[data-t="pending"]{fill:none; stroke:var(--rule-soft)}
   .failring{fill:none; stroke:var(--fail); stroke-width:2; rx:6}
-  .node.cfg-affected{cursor:pointer}
+  .node.cfg-affected{cursor:help}
   .node.cfg-affected rect.card{stroke:var(--datt); stroke-width:2.5}
 
   .datt-dot{fill:var(--datt)}
@@ -257,7 +251,7 @@
   .cfgbody .here{color:var(--fg)}
   .cfgsnippet{margin:0 0 7px; font-family:var(--mono); font-size:.86em; color:var(--fg);
     background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r);
-    padding:8px 10px; white-space:pre; overflow-x:auto}
+    padding:8px 10px; white-space:pre; overflow:auto; max-height:160px}
   .cfghint{margin:0 0 7px; font-size:.86em; color:var(--fg-faint)}
   .segs{display:flex; gap:4px; margin-top:9px; flex-wrap:wrap}
   .seg{
@@ -327,7 +321,6 @@
         <span data-key="tests" style="color:var(--fg-faint)">small squares are tests: filled ran, dashed reused, red failed. Views are reused but never billed.</span>
       </div>
       <div class="nodeOverlay" id="nodeOverlay" hidden>
-        <button class="close" id="nodeOverlayClose" aria-label="Close">&times;</button>
         <span class="nm" id="nodeOverlayName"></span>
         <div id="nodeOverlayBody"></div>
       </div>
@@ -376,18 +369,18 @@ const NW = 168, NH = 56;
 
 const NODES = [
   {id:'src_orders',    name:'raw.orders',        type:'source',      x:COL[0], y:LANE_A},
-  {id:'stg_orders',    name:'stg_orders',        type:'view',        x:COL[1], y:LANE_A},
-  {id:'int_items',     name:'int_order_items',   type:'table',       x:COL[2], y:LANE_A},
-  {id:'fct_orders',    name:'fct_orders',        type:'incremental', x:COL[3], y:LANE_A},
+  {id:'stg_orders',    name:'stg_orders',        type:'view',        x:COL[1], y:LANE_A, path:'models/staging/stg_orders.sql'},
+  {id:'int_items',     name:'int_order_items',   type:'table',       x:COL[2], y:LANE_A, path:'models/intermediate/int_order_items.sql'},
+  {id:'fct_orders',    name:'fct_orders',        type:'incremental', x:COL[3], y:LANE_A, path:'models/marts/fct_orders.sql'},
   {id:'src_customers', name:'raw.customers',     type:'source',      x:COL[0], y:LANE_B},
-  {id:'stg_customers', name:'stg_customers',     type:'view',        x:COL[1], y:LANE_B},
-  {id:'snap_tier',     name:'snap_customer_tier',type:'snapshot',    x:COL[2], y:LANE_B},
-  {id:'dim_customers', name:'dim_customers',     type:'table',       x:COL[3], y:LANE_B},
+  {id:'stg_customers', name:'stg_customers',     type:'view',        x:COL[1], y:LANE_B, path:'models/staging/stg_customers.sql'},
+  {id:'snap_tier',     name:'snap_customer_tier',type:'snapshot',    x:COL[2], y:LANE_B, path:'snapshots/snap_customer_tier.sql'},
+  {id:'dim_customers', name:'dim_customers',     type:'table',       x:COL[3], y:LANE_B, path:'models/marts/dim_customers.sql'},
   {id:'src_payments',  name:'raw.payments',      type:'source',      x:COL[0], y:LANE_C},
-  {id:'stg_payments',  name:'stg_payments',      type:'view',        x:COL[1], y:LANE_C},
-  {id:'int_payments',  name:'int_payments',      type:'table',       x:COL[2], y:LANE_C},
-  {id:'fct_payments',  name:'fct_payments',      type:'incremental', x:COL[3], y:LANE_C},
-  {id:'mart',          name:'mart_customer_360', type:'table',       x:COL[4], y:MID}
+  {id:'stg_payments',  name:'stg_payments',      type:'view',        x:COL[1], y:LANE_C, path:'models/staging/stg_payments.sql'},
+  {id:'int_payments',  name:'int_payments',      type:'table',       x:COL[2], y:LANE_C, path:'models/intermediate/int_payments.sql'},
+  {id:'fct_payments',  name:'fct_payments',      type:'incremental', x:COL[3], y:LANE_C, path:'models/marts/fct_payments.sql'},
+  {id:'mart',          name:'mart_customer_360', type:'table',       x:COL[4], y:MID,    path:'models/marts/mart_customer_360.sql'}
 ];
 const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));
 
@@ -586,7 +579,7 @@ const CONFIGS = [
    what:'Store and compare the runtime output of volatile functions instead of just the function name.',
    here:'int_payments selects current_timestamp(). This is the one dial here that costs you more: switch it on and the model rebuilds every run by design — even though fct_payments underneath it stays a plain reuse, since raw.payments\' data is still inside lag_tolerance.'},
   {key:'allow_clones', def:true, opts:[true,false], scope:'profile',
-   affects:[],
+   affects:['stg_orders','int_items','fct_orders'],
    what:'Whether dbt State may clone into a target at all. Set false on prod to stop dev or CI tables being cloned into production.',
    here:'No effect in this run: there\'s no fresher copy sitting in another schema this time. This is what actually clones stg_orders, int_order_items and fct_orders into her dev schema in scene 5, "State on, dev." Set it false there and she rebuilds all three from scratch instead.'},
   {key:'execute_hooks_on_any_reuse', def:false, opts:[false,true], scope:'model',
@@ -594,18 +587,21 @@ const CONFIGS = [
    what:'Run pre- and post-hooks even when a node is reused instead of built.',
    here:'dim_customers carries a post-hook that grants select. At the default a skipped model runs no hooks, so grants quietly drift.'},
   {key:'pre_clone', def:'if_missing', opts:['never','if_missing','always'], scope:'model',
-   affects:[],
+   affects:['fct_orders','snap_tier'],
    what:'Whether dbt State pre-populates incremental models and snapshots by cloning production before a run.',
    here:'No effect in this run: fct_orders (incremental) and snap_customer_tier (snapshot) already exist in the target schema. This one earns its keep in a fresh dev or CI schema, which is scene 5, "State on, dev."'}
 ];
 
-/* dbt-project stanza for a given config, illustrating where it's actually set */
+/* dbt-project stanza for a given config, scoped to the actual model(s) it
+   affects — lag_tolerance etc. are set per model, not project-wide, so a
+   config touching several nodes gets one config() block per node. */
 function cfgSnippet(c, val){
   const v = shown(val);
   if(c.scope === 'profile'){
     return `my_target:\n  type: snowflake\n  ...\n  ${c.key}: ${v}`;
   }
-  return `models:\n  my_project:\n    +${c.key}: ${v}`;
+  const jv = typeof val === 'boolean' ? String(val) : `'${val}'`;
+  return c.affects.map(id => `-- ${NODE[id].path}\n{{ config(${c.key}=${jv}) }}`).join('\n\n');
 }
 
 /* Production run. Every relation already exists in the target schema, so the
@@ -781,7 +777,8 @@ function drawGraph(){
       const ring = el('rect',{class:'failring', x:n.x-4, y:n.y-4, width:NW+8, height:NH+8, opacity:0});
       g.appendChild(ring);
     }
-    g.addEventListener('click', ()=> onNodeClick(n.id));
+    g.addEventListener('mouseenter', ()=> onNodeHover(n.id));
+    g.addEventListener('mouseleave', hideNodeOverlay);
     dag.appendChild(g);
 
     if(n.type==='source'){
@@ -1041,9 +1038,7 @@ function renderConfigPanel(){
       ${open?`<div class="cfgbody">
         <p>${c.what}</p>
         <pre class="cfgsnippet"><code>${cfgSnippet(c, cur)}</code></pre>
-        ${c.affects.length
-          ? `<p class="cfghint">Click the highlighted node in the graph to see what this changes.</p>`
-          : `<p class="here">${c.here}</p>`}
+        <p class="cfghint">Hover the highlighted node${c.affects.length>1?'s':''} in the graph to see what this changes there.</p>
         <div class="segs">${c.opts.map(o=>
           `<button class="seg" data-cfg="${c.key}" data-val="${shown(o)}" aria-pressed="${o===cur}">${shown(o)}${o===c.def?' ·':''}</button>`
         ).join('')}</div>
@@ -1083,7 +1078,7 @@ function paintAffected(){
 }
 
 let overlayNodeId = null;
-function onNodeClick(nodeId){
+function onNodeHover(nodeId){
   const scene = SCENES[idx];
   if(!scene.tuning || !openCfg) return;
   const c = CONFIGS.find(x=>x.key===openCfg);
@@ -1272,10 +1267,6 @@ $('prev').onclick = ()=> go(idx-1);
 $('next').onclick = ()=> go(idx+1);
 $('run').onclick = ()=> runScene();
 
-$('nodeOverlayClose').onclick = hideNodeOverlay;
-document.querySelector('.stage').addEventListener('click', e=>{
-  if(overlayNodeId && !e.target.closest('.node') && !e.target.closest('#nodeOverlay')) hideNodeOverlay();
-});
 
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape'){ hideNodeOverlay(); return; }
