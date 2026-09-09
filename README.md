@@ -46,7 +46,10 @@ doesn't.
 
 ## A note on the numbers
 
-All dollar figures in this walkthrough are illustrative, not a quote: $0.20 per
-model build and $0.05 per test query are stand-ins for warehouse compute, and
-$0.094 per DATT is the published unit price. Durations are indicative too. None
-of this reflects an actual bill for any real project.
+Warehouse compute in this walkthrough is expressed in credits, a neutral unit
+standing in for whatever serverless compute currency a given platform actually
+bills in — 0.20 credits per model build and 0.05 credits per test query are
+illustrative, not a quote. The $0.094 per DATT figure is different: that's dbt
+State's real, published unit price, so it stays in dollars rather than being
+folded into the same neutral unit. Durations are indicative too. None of this
+reflects an actual bill for any real project.
