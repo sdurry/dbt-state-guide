@@ -46,7 +46,14 @@ Not all claims carry the same confidence — know which is which before editing:
   each test is its own target table; test results are reused when the tested
   node is unchanged; `lag_tolerance` only affects data freshness (a SQL
   change rebuilds regardless); Python models and custom materializations are
-  never reused.
+  never reused. A view using `select *` is only reused when every implicit
+  column it expands to can be statically determined without executing the
+  query — `select *` over a CTE with an explicit column list (the standard
+  staging pattern `stg_orders`, `stg_customers`, and `stg_payments` all use)
+  qualifies, which is why scene 2's staging views are reusable rather than
+  rebuilt. A `select *` sitting over something dbt can't statically resolve
+  rebuilds unconditionally. (Formerly listed below as a "known documentation
+  conflict" — resolved; see the `views-rebuilt` FAQ in README's Sources.)
 - **Verified only in the dbt-agent-skills repo, not on the public billing
   page — confirm with PMM before this is quoted publicly**: views are never
   billed as DATTs even when reused/cloned (their tests still bill normally,
@@ -61,13 +68,6 @@ Not all claims carry the same confidence — know which is which before editing:
   views and walks upstream past a view to find a real table. No source states
   this outright — verify empirically with `dbt state explain --verbose -s
   <test>` after a source load with no SQL changes before treating it as fact.
-- **Known documentation conflict**: whether `select *` in a view is reusable
-  when it sits over a CTE with explicit columns (the standard staging
-  pattern). One doc source says yes (v2 behavior); another says dbt State
-  always rebuilds views using `select *` anywhere, including inside CTEs.
-  **This build assumes v2 behavior**, and scene 2 depends on it — under v1
-  semantics both staging views would go orange and the scene's story weakens
-  substantially.
 - **Modeling assumptions** (not directly stated in docs, adopted for this
   build): a DATT is per target table (database + schema) per day, so dev
   clones count separately from prod skips of the same model — if DATTs are

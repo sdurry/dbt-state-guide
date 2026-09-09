@@ -163,6 +163,7 @@
   .failring{fill:none; stroke:var(--fail); stroke-width:2; rx:6}
   .node.cfg-affected{cursor:help}
   .node.cfg-affected rect.card{stroke:var(--datt); stroke-width:2.5}
+  .node.has-note{cursor:help}
 
   .datt-dot{fill:var(--datt)}
   .agelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.02em}
@@ -457,9 +458,14 @@ const SCENES = [
     perDay:5,
     notes:[
       ['Views are reused, and never billed','stg_orders sits on the fresh source, but a view stores nothing: it reads the new rows when queried, so unchanged logic means no rebuild. Views are also excluded from DATTs whether they are skipped or cloned. Their tests are billed as normal.'],
+      ['select * only reuses when its columns are knowable','stg_orders defines select * over a CTE with an explicit column list — the standard staging pattern — so dbt State can resolve exactly which columns that expands to without running the query. That\'s what makes the view safe to reuse instead of rebuilt. A select * sitting over something dbt can\'t statically resolve rebuilds every time, on principle.'],
       ['Reuse is the unit you pay for','Eleven nodes were handed back instead of executed, but only nine are DATTs: the two views are free. The snapshot counts like any other relation, and so does every distinct test.', true],
       ['Freshness is a live warehouse check, not memory','Each run, dbt State reads last-modified timestamps for upstream tables straight from warehouse metadata (like INFORMATION_SCHEMA), not from what it built last time. The age next to each source above is that check — how long since the data actually changed.']
-    ]
+    ],
+    nodeNotes:{
+      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt.',
+      stg_customers:'Same pattern as stg_orders: select * over an explicit-column CTE, so its implicit columns are statically knowable and the view is safe to reuse.'
+    }
   },
   {
     tab:'Run 2, same day',
@@ -479,7 +485,11 @@ const SCENES = [
     notes:[
       ['A DATT is charged once per day','Every reuse after the first is free. The more often the job runs, the further the same five DATTs are amortised — this is why hourly jobs save far more than daily ones.', true],
       ['Bad data stops at the gate','assert_order_total_positive fails, so mart_customer_360 and its two tests never run. Someone gets paged, and the next two scenes are her afternoon.']
-    ]
+    ],
+    nodeNotes:{
+      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt.',
+      stg_customers:'Same pattern as stg_orders: select * over an explicit-column CTE, so its implicit columns are statically knowable and the view is safe to reuse.'
+    }
   },
   {
     tab:'No state, dev',
@@ -522,7 +532,10 @@ const SCENES = [
     notes:[
       ['No --defer, no --state, no manifest','Deferral happens on its own, and it goes further than deferral: an unchanged selected node is cloned rather than rebuilt, so she can query it. The manifest juggling that state:modified needs is gone.'],
       ['A replayed failure is still a failure','She sees the red test before any query runs. The clone of stg_orders is free because it is a view; the two cloned tables and all four test results are her DATTs, charged once for the day.', true]
-    ]
+    ],
+    nodeNotes:{
+      stg_orders:'Cloning follows the same rule as reuse: stg_orders\' select * resolves over an explicit-column CTE, so dbt State can statically confirm its columns are unchanged before cloning it in — that\'s why it\'s free.'
+    }
   },
   {
     tab:'Tuning',
@@ -631,7 +644,7 @@ function evaluateTuning(cfgIn){
     let a, why;
     if(logic){ a='build'; why=logic; }
     else if(isView && dataReady){
-      a='reuse'; why='a view stores nothing to rebuild — reused in place, but its test still runs against the live data';
+      a='reuse'; why='a view stores nothing to rebuild — reused in place because its select * resolves over an explicit-column CTE, so its output columns are statically known; its test still runs against the live data';
     }
     else if(dataReady){
       if(id==='mart'){ a='build'; why=`enough parents fresh (require_fresh_data_from: ${c.require_fresh_data_from})`; }
@@ -1080,10 +1093,25 @@ function paintAffected(){
 let overlayNodeId = null;
 function onNodeHover(nodeId){
   const scene = SCENES[idx];
-  if(!scene.tuning || !openCfg) return;
-  const c = CONFIGS.find(x=>x.key===openCfg);
-  if(!c || !c.affects.includes(nodeId)) return;
-  showNodeOverlay(nodeId, c.here);
+  if(scene.tuning){
+    if(!openCfg) return;
+    const c = CONFIGS.find(x=>x.key===openCfg);
+    if(!c || !c.affects.includes(nodeId)) return;
+    showNodeOverlay(nodeId, c.here);
+    return;
+  }
+  const note = scene.nodeNotes && scene.nodeNotes[nodeId];
+  if(note) showNodeOverlay(nodeId, note);
+}
+
+/* cursor:help affordance for nodes that carry a hover explanation this scene */
+function paintNodeNotes(scene){
+  const keys = new Set(Object.keys(scene.nodeNotes || {}));
+  NODES.forEach(n=>{
+    const g = dag.querySelector(`.node[data-id="${n.id}"]`);
+    if(!g) return;
+    g.classList.toggle('has-note', keys.has(n.id));
+  });
 }
 
 function showNodeOverlay(nodeId, text){
@@ -1260,6 +1288,7 @@ function go(i, fromHash){
   renderMeters(s, false);
   renderLedger(s);
   $('run').disabled = false;
+  paintNodeNotes(s);
   if(s.tuning) runScene(true);
 }
 
