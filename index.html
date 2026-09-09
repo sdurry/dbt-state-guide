@@ -88,9 +88,9 @@
   }
   .scenebar h1{
     margin:0 0 4px; font-size:clamp(17px,1.6vw,25px); font-weight:620;
-    letter-spacing:-.02em; max-width:60ch;
+    letter-spacing:-.02em; max-width:70ch;
   }
-  .premise{margin:0; color:var(--fg-dim); max-width:72ch}
+  .premise{margin:0; color:var(--fg-dim); max-width:90ch}
   .envwrap{display:flex; gap:8px; align-items:center; margin-bottom:8px}
   .env{
     font-family:var(--mono); font-size:.76em; letter-spacing:.04em;
@@ -104,14 +104,15 @@
     border-radius:var(--r); padding:5px 10px;
   }
   .cmd::before{content:"$ "; color:var(--fg-faint)}
-  .navbtns{display:flex; gap:8px; flex:none}
+  .navbtns{display:flex; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end}
   button.ghost{
     font-family:var(--sans); font-size:.85em; color:var(--fg-dim);
     background:transparent; border:1px solid var(--rule); border-radius:var(--r);
-    padding:7px 12px; cursor:pointer;
+    padding:7px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
   }
   button.ghost:hover:not(:disabled){color:var(--fg); border-color:#3A566D}
   button.ghost:disabled{opacity:.35; cursor:default}
+  button.ghost kbd{border-color:var(--rule); color:var(--fg-faint)}
 
   /* ---------- main ---------- */
   main{display:grid; grid-template-columns:minmax(0,1fr) clamp(290px,25vw,380px); flex:1}
@@ -184,20 +185,20 @@
 
   /* ---------- right rail ---------- */
   aside{border-left:1px solid var(--rule); background:var(--panel-2); display:flex; flex-direction:column; min-width:0}
-  .runbar{padding:14px 16px; border-bottom:1px solid var(--rule)}
-  button.run{width:100%}
   button.run{
-    flex:1; font-family:var(--sans); font-weight:700; font-size:.95em;
+    font-family:var(--sans); font-weight:700; font-size:.85em;
     color:#1A0C08; background:var(--burn); border:none; border-radius:999px;
-    padding:10px 14px; cursor:pointer; letter-spacing:-.01em;
+    padding:7px 16px; cursor:pointer; letter-spacing:-.01em;
+    display:inline-flex; align-items:center; gap:7px;
   }
+  button.run kbd{border-color:#1A0C08; color:#1A0C08; opacity:.75}
   button.run:hover{background:#FF7E63}
   button.run:disabled{background:#4A2C25; color:#9A776E; cursor:default}
 
   .meters{padding:14px 16px; border-bottom:1px solid var(--rule); display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule-soft)}
   .m{background:var(--panel-2); padding:9px 10px}
   .m .k{font-size:.78em; color:var(--fg-faint); letter-spacing:.02em}
-  .m .v{font-family:var(--mono); font-size:clamp(17px,1.7vw,23px); line-height:1.25; letter-spacing:-.02em}
+  .m .v{font-family:var(--mono); font-size:clamp(15px,1.3vw,19px); line-height:1.25; letter-spacing:-.02em}
   .m.wide{grid-column:1/-1}
   .v.burn{color:var(--burn)} .v.reuse{color:var(--reuse)} .v.datt{color:var(--datt)}
   .m .sub{font-size:.78em; color:var(--fg-faint); font-family:var(--mono)}
@@ -213,7 +214,21 @@
   .pip{width:11px; height:11px; border-radius:2px; background:var(--datt)}
   .pip.old{background:transparent; border:1px solid #6B5A2C}
 
-  .log{max-height:240px; overflow:auto; padding:12px 16px 26px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
+  .logwrap{display:flex; flex-direction:column; min-height:0}
+  .loghead{
+    display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
+    background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r);
+    padding:7px 10px; cursor:pointer; transition:background .12s, border-color .12s;
+    font-family:var(--sans); font-size:.82em; font-weight:600; color:var(--fg-dim);
+  }
+  .loghead:hover{color:var(--fg); background:#16283A; border-color:#3A566D}
+  .loghead:active{background:#1B2C3B}
+  .loghead .chev{font-size:.75em; color:var(--fg-faint); transition:transform .15s}
+  .logwrap.collapsed .chev{transform:rotate(-90deg)}
+  .logwrap.collapsed .log{display:none}
+  .logwrap:not(.collapsed) .loghead{border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:none}
+  .logwrap:not(.collapsed) .log{border:1px solid var(--rule); border-top:none; border-radius:0 0 var(--r) var(--r)}
+  .log{max-height:240px; overflow:auto; padding:10px 16px 20px; font-family:var(--mono); font-size:.76em; line-height:1.65; min-height:150px}
   .log div{white-space:pre-wrap; word-break:break-word; color:var(--fg-dim)}
   .log .ok{color:var(--reuse)}
   .log .bl{color:var(--burn)}
@@ -268,7 +283,7 @@
   .cfgfoot{grid-column:1/-1; border-top:1px solid var(--rule-soft); margin-top:6px; padding-top:10px;
            display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:.84em; color:var(--fg-faint)}
   .foot{padding:8px clamp(16px,2.2vw,32px) 14px; font-size:.74em; color:var(--fg-faint); background:var(--panel)}
-  .foot kbd{font-family:var(--mono); border:1px solid var(--rule); border-radius:3px; padding:0 4px}
+  kbd{font-family:var(--mono); font-size:.85em; border:1px solid var(--rule); border-radius:3px; padding:0 4px; line-height:1.5}
 
   /* ---------- deep-dive modal ---------- */
   .deepdive-backdrop{
@@ -318,7 +333,9 @@
     main{min-height:0; overflow:hidden}
     .stage{min-height:0; overflow:auto}
     aside{min-height:0; overflow:hidden}
-    svg.dag{max-height:52vh}
+    svg.dag{flex:1 1 0; min-height:200px; max-height:none}
+    .logwrap{flex:0 1 auto}
+    .logwrap:not(.collapsed) .log{min-height:60px}
   }
   @media (max-width:940px){
     main{grid-template-columns:1fr}
@@ -347,18 +364,22 @@
       <p class="premise" id="premise"></p>
     </div>
     <div class="navbtns">
-      <button class="ghost" id="prev">Back</button>
-      <button class="ghost" id="next">Next</button>
+      <button class="ghost" id="prev"><kbd>&larr;</kbd> Back</button>
+      <button class="run" id="run">Run this scene <kbd>R</kbd></button>
+      <button class="ghost" id="next">Next <kbd>&rarr;</kbd></button>
     </div>
   </div>
 
   <main>
     <section class="stage">
       <svg class="dag" id="dag" viewBox="0 0 1040 400" role="img" aria-label="dbt project lineage graph"></svg>
-      <div class="runbar">
-        <button class="run" id="run">Run this scene</button>
+      <div class="logwrap" id="logwrap">
+        <button class="loghead" id="logToggle" aria-expanded="true" aria-controls="log">
+          <span>Run log</span>
+          <span class="chev" aria-hidden="true">&#9662;</span>
+        </button>
+        <div class="log" id="log"></div>
       </div>
-      <div class="log" id="log"></div>
       <div class="legend" id="legend">
         <span data-key="b"><i class="sw b"></i>built, warehouse compute</span>
         <span data-key="r"><i class="sw r"></i>reused in place</span>
@@ -479,7 +500,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'Without dbt State, the whole project rebuilds',
-    premise:'Only raw.orders landed new rows overnight. dbt has no way to know that, so all ten nodes and all twelve tests execute — including the customer and payments lanes, which are byte-for-byte what they were before.',
+    premise:'Only orders got new rows overnight. dbt can\'t tell that. It rebuilds all ten models and reruns all twelve tests.',
     ledger:'prod',
     srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d', src_payments:'landed 55m ago'},
     nodes:{...build(ALL_MODELS), src_orders:'fresh', src_customers:'stale', src_payments:'stale'},
@@ -495,7 +516,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'With dbt State, only the lane with new data rebuilds',
-    premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane hasn\'t moved in days — snap_customer_tier and dim_customers are reused in place — but stg_customers rebuilds anyway: its select * can\'t be statically resolved, so dbt runs it every time regardless of freshness. The payments lane is mid-cycle — its tables are reused too, but stg_payments itself rebuilds every run for its own reason, a quirk the tuning tab unpacks later — reuse is what a DATT counts, regardless of why the data didn\'t change.',
+    premise:'dbt State checks each model\'s logic and data freshness before running it.',
     ledger:'prod',
     deepDive:true,
     srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d', src_payments:'landed 50m ago'},
@@ -524,7 +545,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'Second run of the day: same reuse, no new DATTs, one red test',
-    premise:'Three hours later the job runs again. snap_customer_tier and dim_customers are reused again — you already paid for them once today, so the DATT bill doesn\'t move — though stg_customers itself still rebuilds, the same select-* quirk as last run. The payments tables now have their own batch to catch up on, right alongside orders, and stg_payments rebuilds again too, its own quirk from last run. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
+    premise:'Same job, three hours later, reuse leads to no additional DATTs.',
     ledger:'prod',
     deepDive:true,
     srcAge:{src_orders:'landed 15m ago', src_customers:'unchanged 3d', src_payments:'landed 25m ago'},
@@ -550,7 +571,7 @@ const SCENES = [
     env:'dev', envLabel:'development',
     cmd:'dbt build --select +fct_orders',
     title:'Reproducing the failure the old way: rebuild the lane',
-    premise:'Her dev schema is empty, so she cannot just run the test — the tables it points at do not exist. She pulls the whole upstream lane in with the + operator, waits for fct_orders to build over full history, and repeats that on every edit. Five iterations before the fix lands.',
+    premise:'Dev schema is empty, so the failing test has nothing to query. You can leverage --defer or clone, but you need to know how this works.',
     ledger:'dev',
     iterations:5,
     srcAge:{src_orders:'landed 25m ago'},
@@ -571,7 +592,7 @@ const SCENES = [
     env:'dev', envLabel:'development',
     cmd:'dbt build --select +fct_orders',
     title:'With dbt State, prod comes to her',
-    premise:'Same command, no flags to remember. dbt State finds identical logic with fresher data in the prod schema, clones the upstream tables into her dev schema and replays the test results it already holds. A reused result still surfaces as a failure, so the red test is in front of her without a single query, and the cloned fct_orders is there to inspect. Only her edits to fct_orders trigger a real build after that.',
+    premise:'Same command, no extra flags. Just works.',
     ledger:'dev',
     iterations:5,
     srcAge:{src_orders:'landed 25m ago'},
@@ -596,7 +617,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'The dials, and what each one actually does',
-    premise:'It\'s later the same afternoon. The fix from scene 3 merged clean, and this run doesn\'t trip a single test. raw.orders landed 90 minutes ago and raw.payments landed a batch 20 minutes ago; the customer side still hasn\'t moved in three days. A CI merge job also left a fresher int_order_items behind 10 minutes ago. Every config below sits at its documented default. Open one, change it, and the run re-evaluates as you go.',
+    premise:'Later that afternoon. The fix from scene 3 is live, and this run passes clean. Every config below sits at its default. Open one, change it, and the run updates as you go.',
     ledger:'prod',
     tuning:true,
     perDay:5,
@@ -1076,8 +1097,8 @@ function logLine(html, cls){
 }
 
 function renderNotes(scene, show){
-  document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
-  $('log').style.display = scene.tuning ? 'none' : '';
+  $('run').style.display = scene.tuning ? 'none' : '';
+  $('logwrap').style.display = scene.tuning ? 'none' : '';
   $('meters').style.display = scene.tuning ? 'none' : '';
   $('metersHead').style.display = scene.tuning ? 'none' : '';
   document.querySelector('.ledger').style.display = scene.tuning ? 'none' : '';
@@ -1439,7 +1460,6 @@ function go(i, fromHash){
   $('env').textContent = s.envLabel;
   $('env').className = 'env ' + s.env;
   $('cmd').textContent = s.cmd;
-  $('run').textContent = s.cmd;
   $('title').textContent = s.title;
   $('premise').textContent = s.premise;
   $('prev').disabled = idx===0;
@@ -1460,6 +1480,17 @@ function go(i, fromHash){
 $('prev').onclick = ()=> go(idx-1);
 $('next').onclick = ()=> go(idx+1);
 $('run').onclick = ()=> runScene();
+
+(function initLogToggle(){
+  const collapsed = localStorage.getItem('logCollapsed') === '1';
+  $('logwrap').classList.toggle('collapsed', collapsed);
+  $('logToggle').setAttribute('aria-expanded', String(!collapsed));
+  $('logToggle').onclick = ()=>{
+    const nowCollapsed = $('logwrap').classList.toggle('collapsed');
+    $('logToggle').setAttribute('aria-expanded', String(!nowCollapsed));
+    localStorage.setItem('logCollapsed', nowCollapsed ? '1' : '0');
+  };
+})();
 $('deepdive').addEventListener('click', e=>{ if(e.target.id === 'deepdive') closeDeepDive(); });
 
 
