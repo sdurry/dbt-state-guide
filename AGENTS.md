@@ -20,7 +20,10 @@ The model: two sources into two lanes converging on a mart. `raw.orders`
 `fct_orders` is the test failure that drives scenes 3–5. Metrics (`tally`,
 `economics`, `dattKeys`) are computed at runtime from painted node state —
 never hardcode a total; change a node's state and the meters/ledger/log
-follow automatically. `BILLABLE(id)` in `index.html` is the single place the
+follow automatically. `economics().wh` is warehouse compute, displayed via
+the `credits()` formatter; DATT cost is real dollars via `money()` — never
+sum the two into one figure again, that bug is why the ledger's old combined
+"total" row was removed. `BILLABLE(id)` in `index.html` is the single place the
 view-never-billed carve-out lives — it gates the DATT dot, ledger, log
 wording, and meter subtitle. Keep it that way rather than duplicating the
 check elsewhere.
@@ -30,9 +33,10 @@ check elsewhere.
 Every dbt State claim in `index.html` was fact-checked against the sources in
 `README.md`. Re-verify against those sources before changing any behavior,
 copy, or pricing/timing claim in the premises, notes, or decision logic
-(`evaluateTuning`) — this content should not drift. All dollar figures and
-durations are explicitly illustrative, not real pricing (see README "A note
-on the numbers").
+(`evaluateTuning`) — this content should not drift. Warehouse-compute figures
+are expressed in credits (a neutral illustrative unit, not real pricing) and
+durations are illustrative too; the DATT unit price ($0.094) is real,
+published pricing and stays in dollars — see README "A note on the numbers".
 
 Not all claims carry the same confidence — know which is which before editing:
 

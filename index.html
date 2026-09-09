@@ -327,7 +327,7 @@
   </main>
 
   <div class="foot">
-    Illustrative figures, not a quote: $0.20 per model built and $0.05 per test query as a stand-in for warehouse compute, $0.094 per DATT.
+    Illustrative figures, not a quote: 0.20 credits per model built and 0.05 credits per test query as a stand-in for serverless warehouse compute — a neutral unit, not tied to any specific platform's pricing. $0.094 per DATT is different: that's dbt State's real, published unit price.
     Durations are indicative, and the run animation batches steps four at a time to suggest this profile's thread count (4) — not a real scheduler. Move with <kbd>←</kbd> <kbd>→</kbd>, run with <kbd>R</kbd>.
   </div>
 </div>
@@ -696,6 +696,7 @@ function economics(scene){
 }
 
 const money = n => '$' + n.toFixed(2);
+const credits = n => n.toFixed(2) + ' credits';
 const clock = s => s < 60 ? Math.round(s)+'s' : Math.floor(s/60)+'m ' + String(Math.round(s%60)).padStart(2,'0') + 's';
 
 /* ---------------------------------------------------------------
@@ -848,17 +849,16 @@ function renderMeters(scene, showFinal){
   const base = SCENES[0];
   const m = $('meters');
   const dattCost = live.newDatts * C.datt;
-  const total = e.wh + dattCost;
 
   let compare = '';
   if((scene.ledger==='prod' || scene.tuning) && idx>0){
     const b = economics(base);
-    const pct = Math.round((1 - total/(b.wh)) * 100);
+    const pct = Math.round((1 - e.wh/b.wh) * 100);
     compare = `${pct}% cheaper than scene 1`;
   }
   if(scene.iterations && idx===4){
     const b = economics(SCENES[3]);
-    const pct = Math.round((1 - total/b.wh) * 100);
+    const pct = Math.round((1 - e.wh/b.wh) * 100);
     compare = `${pct}% cheaper than scene 4`;
   }
 
@@ -867,9 +867,8 @@ function renderMeters(scene, showFinal){
     ['nodes reused', showFinal ? e.reuses : '—', 'reuse',
       showFinal && e.reuses ? (t.freeReuse ? `${t.freeReuse} free, views` : 'no compute') : ''],
     ['wall clock', showFinal ? clock(e.secs) : '—', '', e.label],
-    ['warehouse cost', showFinal ? money(e.wh) : '—', 'burn', ''],
-    ['dbt State cost', showFinal ? money(dattCost) : '—', 'datt', showFinal ? `${live.newDatts} new DATT${live.newDatts===1?'':'s'}` : ''],
-    ['total', showFinal ? money(total) : '—', '', compare]
+    ['warehouse compute', showFinal ? credits(e.wh) : '—', 'burn', compare],
+    ['dbt State cost', showFinal ? money(dattCost) : '—', 'datt', showFinal ? `${live.newDatts} new DATT${live.newDatts===1?'':'s'}` : '']
   ];
   m.innerHTML = rows.map(([k,v,cls,sub],i)=>`
     <div class="m">
@@ -879,12 +878,13 @@ function renderMeters(scene, showFinal){
     </div>`).join('');
 
   if(scene.perDay && showFinal){
-    const perDay = idx===0
-      ? total*scene.perDay
-      : e.wh*scene.perDay + (live.newDatts + live.oldDatts)*C.datt;
+    const whPerDay = e.wh*scene.perDay;
+    const dattPerDay = idx===0
+      ? dattCost*scene.perDay
+      : (live.newDatts + live.oldDatts)*C.datt;
     const note = idx===0
-      ? `${money(perDay)} a day at 5 runs`
-      : `${money(perDay)} a day at 5 runs, DATTs paid once`;
+      ? `${credits(whPerDay)} a day at 5 runs, plus ${money(dattPerDay)} DATT`
+      : `${credits(whPerDay)} a day at 5 runs, plus ${money(dattPerDay)} DATT, paid once`;
     m.insertAdjacentHTML('beforeend',
       `<div class="m wide"><div class="k">projected</div><div class="v" style="font-size:1em">${note}</div></div>`);
   }
