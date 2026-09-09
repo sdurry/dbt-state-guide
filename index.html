@@ -91,8 +91,6 @@
     letter-spacing:-.02em; max-width:70ch;
   }
   .premise{margin:0; color:var(--fg-dim); max-width:90ch}
-  .premise ul{margin:6px 0 0; padding-left:1.2em}
-  .premise li{margin:2px 0}
   .envwrap{display:flex; gap:8px; align-items:center; margin-bottom:8px}
   .env{
     font-family:var(--mono); font-size:.76em; letter-spacing:.04em;
@@ -363,7 +361,7 @@
     <div>
       <div class="envwrap"><span class="env" id="env"></span><span class="cmd" id="cmd"></span></div>
       <h1 id="title"></h1>
-      <div class="premise" id="premise"></div>
+      <p class="premise" id="premise"></p>
     </div>
     <div class="navbtns">
       <button class="ghost" id="prev"><kbd>&larr;</kbd> Back</button>
@@ -518,7 +516,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'With dbt State, only the lane with new data rebuilds',
-    premise:'dbt State checks each model\'s logic and how fresh its data is before deciding to run it.<ul><li>Orders lane: new data, so it builds.</li><li>Customer lane: no new data. snap_customer_tier and dim_customers reuse, but stg_customers rebuilds anyway (a select * quirk).</li><li>Payments lane: mostly reused, but stg_payments rebuilds every run for a different reason.</li></ul>',
+    premise:'dbt State checks each model\'s logic and how fresh its data is before deciding to run it. The orders lane has new data, so it builds. The customer lane doesn\'t: snap_customer_tier and dim_customers reuse, but stg_customers rebuilds anyway because of a select * quirk. The payments lane is mostly reused too, though stg_payments rebuilds every run for a different reason.',
     ledger:'prod',
     deepDive:true,
     srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d', src_payments:'landed 50m ago'},
@@ -547,7 +545,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'Second run of the day: same reuse, no new DATTs, one red test',
-    premise:'Same job, three hours later.<ul><li>snap_customer_tier and dim_customers reuse again. Already paid for today, so no new DATTs there.</li><li>stg_customers and stg_payments still rebuild, for the same reasons as last run.</li><li>A data quality test fails on fct_orders, so mart_customer_360 never builds.</li></ul>',
+    premise:'Same job, three hours later. snap_customer_tier and dim_customers reuse again, already paid for today, so no new DATTs there. stg_customers and stg_payments still rebuild, for the same reasons as last run. This time a data quality test fails on fct_orders, so mart_customer_360 never builds.',
     ledger:'prod',
     deepDive:true,
     srcAge:{src_orders:'landed 15m ago', src_customers:'unchanged 3d', src_payments:'landed 25m ago'},
@@ -573,7 +571,7 @@ const SCENES = [
     env:'dev', envLabel:'development',
     cmd:'dbt build --select +fct_orders',
     title:'Reproducing the failure the old way: rebuild the lane',
-    premise:'Her dev schema is empty, so the failing test has nothing to query. She pulls the whole upstream lane in with the + operator and rebuilds it from scratch, then repeats that for every edit. It takes five tries to land the fix.',
+    premise:'Her dev schema is empty, so the failing test has nothing to query. Without dbt State, she either reruns everything or has to know her way around --defer and cloning.',
     ledger:'dev',
     iterations:5,
     srcAge:{src_orders:'landed 25m ago'},
@@ -594,7 +592,7 @@ const SCENES = [
     env:'dev', envLabel:'development',
     cmd:'dbt build --select +fct_orders',
     title:'With dbt State, prod comes to her',
-    premise:'Same command, no extra flags.<ul><li>dbt State finds the same logic with fresher data in prod and clones it into her dev schema.</li><li>Test results are replayed too, so the red test shows up without running a single query.</li><li>Only her actual edits to fct_orders trigger a real build after that.</li></ul>',
+    premise:'Same command, no extra flags. dbt State finds the same logic with fresher data in prod and clones it into her dev schema. Test results are replayed too, so the red test shows up without running a single query. Only her actual edits to fct_orders trigger a real build after that.',
     ledger:'dev',
     iterations:5,
     srcAge:{src_orders:'landed 25m ago'},
@@ -619,7 +617,7 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'The dials, and what each one actually does',
-    premise:'Later that afternoon. The fix from scene 3 is live, and this run passes clean.<ul><li>Orders landed 90 minutes ago, payments 20 minutes ago. Customers haven\'t moved in three days.</li><li>Every config below sits at its default.</li></ul>Open one, change it, and the run updates as you go.',
+    premise:'Later that afternoon. The fix from scene 3 is live, and this run passes clean. Every config below sits at its default. Open one, change it, and the run updates as you go.',
     ledger:'prod',
     tuning:true,
     perDay:5,
@@ -1463,7 +1461,7 @@ function go(i, fromHash){
   $('env').className = 'env ' + s.env;
   $('cmd').textContent = s.cmd;
   $('title').textContent = s.title;
-  $('premise').innerHTML = s.premise;
+  $('premise').textContent = s.premise;
   $('prev').disabled = idx===0;
   $('next').disabled = idx===SCENES.length-1;
   renderNotes(s, false);
