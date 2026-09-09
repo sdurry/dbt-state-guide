@@ -592,7 +592,7 @@ const SCENES = [
     env:'dev', envLabel:'development',
     cmd:'dbt build --select +fct_orders',
     title:'With dbt State, prod comes to her',
-    premise:'Same command, no extra flags: dbt State finds the same logic with fresher data in prod, clones it into her dev schema, and replays the test results, so the red test shows up without a single query. Only her actual edits to fct_orders trigger a real build after that.',
+    premise:'Same command, no extra flags. Just works.',
     ledger:'dev',
     iterations:5,
     srcAge:{src_orders:'landed 25m ago'},
