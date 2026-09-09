@@ -23,9 +23,13 @@ columns explicitly, so dbt State can resolve `select *` statically and
 reuse it; `stg_customers`' CTE is itself a `select *` (star-on-star), so it
 rebuilds every run regardless of freshness — still $0 DATT (it's a view),
 just a wasted build. `stg_payments` has its own, unrelated always-rebuilds
-quirk (Jinja `env_var()` in a column). Don't accidentally make
-`stg_customers` reusable again when touching scene copy or
-`evaluateTuning` — its whole point is being the contrast case to
+quirk (Jinja `env_var()` in a column) — a third, deliberately different
+reason a view still rebuilds. `DEEPDIVE_STAR` in `index.html` holds the SQL
+for all three and is shown by clicking any of the three nodes in scenes 2–3
+(`scene.deepDive`); keep its three `why` strings in sync with the node-hover
+`nodeNotes` text and this paragraph if the mechanics ever change. Don't
+accidentally make `stg_customers` reusable again when touching scene copy
+or `evaluateTuning` — its whole point is being the contrast case to
 `stg_orders`. Metrics (`tally`,
 `economics`, `dattKeys`) are computed at runtime from painted node state —
 never hardcode a total; change a node's state and the meters/ledger/log

@@ -505,13 +505,14 @@ const SCENES = [
     perDay:5,
     notes:[
       ['Views are reused, and never billed','stg_orders sits on the fresh source, but a view stores nothing: it reads the new rows when queried, so unchanged logic means no rebuild. Views are also excluded from DATTs whether they are skipped or cloned. Their tests are billed as normal.'],
-      ['Same rule, opposite outcome','stg_orders reuses because its CTE names its columns, so dbt can resolve what select * expands to without running anything. stg_customers rebuilds every run because its CTE is itself a select * — two stars stacked, no column list anywhere in the chain, so dbt can\'t resolve it without executing the query. Click either node to compare the SQL.'],
+      ['Same rule, two other reasons','stg_orders reuses because its CTE names its columns, so dbt can resolve what select * expands to without running anything. stg_customers rebuilds every run because its CTE is itself a select * — two stars stacked, no column list anywhere in the chain. stg_payments rebuilds for a completely different reason: an env_var() stamped into a column changes its rendered SQL every run. Click any of the three to compare the SQL.'],
       ['Reuse is the unit you pay for','Nine nodes were handed back instead of executed, but only eight are DATTs: one view is free. The snapshot counts like any other relation, and so does every distinct test.', true],
       ['Freshness is a live warehouse check, not memory','Each run, dbt State reads last-modified timestamps for upstream tables straight from warehouse metadata (like INFORMATION_SCHEMA), not from what it built last time. The age next to each source above is that check — how long since the data actually changed.']
     ],
     nodeNotes:{
-      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt. Click to compare with stg_customers.',
-      stg_customers:'select * here sits over a CTE that is itself a select * — two stars stacked, so dbt can\'t resolve the output columns without running the query. Rebuilds every run, even though raw.customers hasn\'t moved in days. Click to compare with stg_orders.'
+      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt. Click to compare with stg_customers and stg_payments.',
+      stg_customers:'select * here sits over a CTE that is itself a select * — two stars stacked, so dbt can\'t resolve the output columns without running the query. Rebuilds every run, even though raw.customers hasn\'t moved in days. Click to compare with stg_orders and stg_payments.',
+      stg_payments:'No select * here at all — every column is explicit. But env_var(\'AIRFLOW_RUN_ID\') renders a different literal into the compiled SQL every run, so its rendered code never matches last run\'s. Rebuilds every run for a completely different reason than stg_customers. Click to compare.'
     }
   },
   {
@@ -535,8 +536,9 @@ const SCENES = [
       ['Bad data stops at the gate','assert_order_total_positive fails, so mart_customer_360 and its two tests never run. Someone gets paged, and the next two scenes are her afternoon.']
     ],
     nodeNotes:{
-      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt. Click to compare with stg_customers.',
-      stg_customers:'select * here sits over a CTE that is itself a select * — two stars stacked, so dbt can\'t resolve the output columns without running the query. Rebuilds every run, even though raw.customers hasn\'t moved in days. Click to compare with stg_orders.'
+      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt. Click to compare with stg_customers and stg_payments.',
+      stg_customers:'select * here sits over a CTE that is itself a select * — two stars stacked, so dbt can\'t resolve the output columns without running the query. Rebuilds every run, even though raw.customers hasn\'t moved in days. Click to compare with stg_orders and stg_payments.',
+      stg_payments:'No select * here at all — every column is explicit. But env_var(\'AIRFLOW_RUN_ID\') renders a different literal into the compiled SQL every run, so its rendered code never matches last run\'s. Rebuilds every run for a completely different reason than stg_customers. Click to compare.'
     }
   },
   {
@@ -1175,8 +1177,8 @@ function paintNodeNotes(scene){
    trusted strings, so this is simpler than it would be to generalize.
 ----------------------------------------------------------------*/
 const DEEPDIVE_STAR = {
-  title:'Same rule, opposite outcome',
-  sub:'Both stg_orders and stg_customers are select * views. Only one can be reused without running the query.',
+  title:'Three views, three fates',
+  sub:'stg_orders, stg_customers, and stg_payments are all views. Only one of them is actually reused.',
   cards:[
     {id:'stg_orders', tone:'good', verdict:'REUSED',
      code:
@@ -1205,7 +1207,19 @@ with source as (
 )
 
 select * from source`,
-     why:'Two stars stacked — no column list anywhere in the chain — so dbt can\'t resolve the output without executing it. Still a view, so still $0 DATT, just a wasted build every run.'}
+     why:'Two stars stacked — no column list anywhere in the chain — so dbt can\'t resolve the output without executing it. Still a view, so still $0 DATT, just a wasted build every run.'},
+    {id:'stg_payments', tone:'bad', verdict:'REBUILT EVERY RUN',
+     code:
+`-- ${NODE.stg_payments.path}
+select
+    payment_id,
+    order_id,
+    payment_amount,
+    payment_method,
+    <span class="tok-bad">'{{ env_var('AIRFLOW_RUN_ID') }}'</span> as loaded_by_run_id
+
+from {{ source('raw', 'payments') }}`,
+     why:'Not a select * problem at all — every column is explicit. But env_var(\'AIRFLOW_RUN_ID\') renders a different literal into the compiled SQL on every run, so its rendered code never matches last run\'s. Without compare_unrendered_code on, dbt can\'t tell the underlying logic is unchanged. Same wasted-build outcome as stg_customers, completely different cause.'}
   ]
 };
 
@@ -1238,10 +1252,11 @@ function closeDeepDive(){
   $('deepdive').hidden = true;
 }
 
+const DEEPDIVE_NODES = new Set(['stg_orders', 'stg_customers', 'stg_payments']);
 function onNodeClick(nodeId){
   const scene = SCENES[idx];
   if(!scene.deepDive) return;
-  if(nodeId !== 'stg_orders' && nodeId !== 'stg_customers') return;
+  if(!DEEPDIVE_NODES.has(nodeId)) return;
   openDeepDive();
 }
 
