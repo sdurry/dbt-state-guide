@@ -26,8 +26,8 @@
     --rule:#24394B;
     --rule-soft:#1B2C3B;
     --fg:#E9F0F4;
-    --fg-dim:#8CA6B8;
-    --fg-faint:#5C7488;
+    --fg-dim:#9DB4C4;
+    --fg-faint:#7E97A8;
     --burn:#FF694A;        /* compute spent */
     --burn-soft:#3A1F1C;
     --reuse:#4FC3A9;       /* no compute */
@@ -115,8 +115,23 @@
 
   /* ---------- main ---------- */
   main{display:grid; grid-template-columns:minmax(0,1fr) clamp(290px,25vw,380px); flex:1}
-  .stage{padding:clamp(10px,1.4vw,22px) clamp(16px,2.2vw,32px); min-width:0; display:flex; flex-direction:column; gap:14px}
+  .stage{padding:clamp(10px,1.4vw,22px) clamp(16px,2.2vw,32px); min-width:0; display:flex; flex-direction:column; gap:14px; position:relative}
   svg.dag{width:100%; height:auto; display:block}
+
+  .nodeOverlay{
+    position:absolute; max-width:min(340px,80vw); z-index:5;
+    background:var(--panel); border:1px solid var(--rule); border-radius:var(--r);
+    box-shadow:0 8px 24px rgba(0,0,0,.4); padding:10px 34px 12px 12px;
+    font-size:.86em; color:var(--fg-dim); line-height:1.45;
+  }
+  .nodeOverlay[hidden]{display:none}
+  .nodeOverlay .close{
+    position:absolute; top:6px; right:6px; width:22px; height:22px; line-height:20px;
+    text-align:center; border:none; background:transparent; color:var(--fg-faint);
+    font-size:1em; cursor:pointer; border-radius:4px;
+  }
+  .nodeOverlay .close:hover{color:var(--fg); background:var(--panel-2)}
+  .nodeOverlay .nm{display:block; margin:0 0 5px; font-family:var(--mono); font-size:.95em; color:var(--fg)}
 
   /* node visuals */
   .node rect.card{fill:var(--panel); stroke:var(--rule); stroke-width:1.5; rx:5}
@@ -152,6 +167,8 @@
   .tick[data-t="blocked"]{fill:none; stroke:var(--blocked); stroke-dasharray:1 3}
   .tick[data-t="pending"]{fill:none; stroke:var(--rule-soft)}
   .failring{fill:none; stroke:var(--fail); stroke-width:2; rx:6}
+  .node.cfg-affected{cursor:pointer}
+  .node.cfg-affected rect.card{stroke:var(--datt); stroke-width:2.5}
 
   .datt-dot{fill:var(--datt)}
   .agelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.02em}
@@ -180,18 +197,19 @@
 
   .meters{padding:14px 16px; border-bottom:1px solid var(--rule); display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule-soft)}
   .m{background:var(--panel-2); padding:9px 10px}
-  .m .k{font-size:.72em; color:var(--fg-faint); letter-spacing:.02em}
+  .m .k{font-size:.78em; color:var(--fg-faint); letter-spacing:.02em}
   .m .v{font-family:var(--mono); font-size:clamp(17px,1.7vw,23px); line-height:1.25; letter-spacing:-.02em}
   .m.wide{grid-column:1/-1}
   .v.burn{color:var(--burn)} .v.reuse{color:var(--reuse)} .v.datt{color:var(--datt)}
-  .m .sub{font-size:.72em; color:var(--fg-faint); font-family:var(--mono)}
+  .m .sub{font-size:.78em; color:var(--fg-faint); font-family:var(--mono)}
 
+  .railhead{margin:0 0 3px; font-size:.85em; font-weight:600}
+  #metersHead{padding:12px 16px 0}
   .ledger{padding:12px 16px; border-bottom:1px solid var(--rule)}
-  .ledger h2{margin:0 0 3px; font-size:.85em; font-weight:600}
-  .ledger p{margin:0 0 8px; font-size:.78em; color:var(--fg-faint)}
+  .ledger p{margin:0 0 8px; font-size:.84em; color:var(--fg-faint)}
   .ledgergroup{margin-top:10px}
   .ledgergroup:first-of-type{margin-top:0}
-  .ledgerlbl{font-size:.72em; letter-spacing:.02em; margin:0 0 4px}
+  .ledgerlbl{font-size:.78em; letter-spacing:.02em; margin:0 0 4px}
   .pips{display:flex; flex-wrap:wrap; gap:3px; min-height:11px}
   .pip{width:11px; height:11px; border-radius:2px; background:var(--datt)}
   .pip.old{background:transparent; border:1px solid #6B5A2C}
@@ -205,13 +223,16 @@
   .log .sum{color:var(--fg); border-top:1px solid var(--rule-soft); margin-top:8px; padding-top:8px}
 
   /* ---------- notes (right rail) ---------- */
+  .noteswrap{
+    border-top:1px solid var(--rule); padding:12px 16px 14px;
+    display:flex; flex-direction:column; min-height:0; flex:1;
+  }
   .notes{
-    padding:12px 16px 14px; border-top:1px solid var(--rule);
-    display:flex; flex-direction:column; gap:11px;
+    display:flex; flex-direction:column; gap:11px; margin-top:3px;
     flex:1; min-height:0; overflow:auto;
   }
-  .notes .hint{margin:0; font-size:.78em; color:var(--fg-faint)}
-  .notes .note{display:flex; gap:9px; font-size:.82em; color:var(--fg-dim)}
+  .notes .hint{margin:0; font-size:.84em; color:var(--fg-faint)}
+  .notes .note{display:flex; gap:9px; font-size:.88em; color:var(--fg-dim)}
   .notes .note b{color:var(--fg); font-weight:600}
   .notes .bar{width:2px; background:var(--rule); flex:none; border-radius:2px}
   .notes .note.key .bar{background:var(--datt)}
@@ -231,9 +252,13 @@
   .cfgval{font-size:.92em; color:var(--datt); border:1px solid #574818; background:#241E0B; border-radius:3px; padding:1px 6px}
   .cfgval.def{color:var(--fg-faint); border-color:var(--rule); background:transparent}
   .cfgcar{color:var(--fg-faint); font-size:.85em; flex:none}
-  .cfgbody{padding:0 0 12px; font-family:var(--sans); font-size:.82em; color:var(--fg-dim); max-width:56ch}
+  .cfgbody{padding:0 0 12px; font-family:var(--sans); font-size:.88em; color:var(--fg-dim); max-width:56ch}
   .cfgbody p{margin:0 0 7px}
   .cfgbody .here{color:var(--fg)}
+  .cfgsnippet{margin:0 0 7px; font-family:var(--mono); font-size:.86em; color:var(--fg);
+    background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r);
+    padding:8px 10px; white-space:pre; overflow-x:auto}
+  .cfghint{margin:0 0 7px; font-size:.86em; color:var(--fg-faint)}
   .segs{display:flex; gap:4px; margin-top:9px; flex-wrap:wrap}
   .seg{
     font-family:var(--mono); font-size:.92em; padding:4px 9px; cursor:pointer;
@@ -242,7 +267,7 @@
   .seg:hover{color:var(--fg)}
   .seg[aria-pressed="true"]{background:var(--burn); border-color:var(--burn); color:#1A0C08}
   .cfgfoot{grid-column:1/-1; border-top:1px solid var(--rule-soft); margin-top:6px; padding-top:10px;
-           display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:.78em; color:var(--fg-faint)}
+           display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:.84em; color:var(--fg-faint)}
   .foot{padding:8px clamp(16px,2.2vw,32px) 14px; font-size:.74em; color:var(--fg-faint); background:var(--panel)}
   .foot kbd{font-family:var(--mono); border:1px solid var(--rule); border-radius:3px; padding:0 4px}
 
@@ -293,21 +318,27 @@
         <button class="run" id="run">Run this scene</button>
       </div>
       <div class="log" id="log"></div>
-      <div class="legend">
-        <span><i class="sw b"></i>built, warehouse compute</span>
-        <span><i class="sw r"></i>reused in place</span>
-        <span><i class="sw c"></i>cloned from another schema</span>
-        <span><i class="sw x"></i>skipped, upstream test failed</span>
-        <span><i class="sw" style="background:var(--datt);border-color:var(--datt);width:12px"></i>counts as a DATT</span>
-        <span style="color:var(--fg-faint)">small squares are tests: filled ran, dashed reused, red failed. Views are reused but never billed.</span>
+      <div class="legend" id="legend">
+        <span data-key="b"><i class="sw b"></i>built, warehouse compute</span>
+        <span data-key="r"><i class="sw r"></i>reused in place</span>
+        <span data-key="c"><i class="sw c"></i>cloned from another schema</span>
+        <span data-key="x"><i class="sw x"></i>skipped, upstream test failed</span>
+        <span data-key="datt"><i class="sw" style="background:var(--datt);border-color:var(--datt);width:12px"></i>counts as a DATT</span>
+        <span data-key="tests" style="color:var(--fg-faint)">small squares are tests: filled ran, dashed reused, red failed. Views are reused but never billed.</span>
+      </div>
+      <div class="nodeOverlay" id="nodeOverlay" hidden>
+        <button class="close" id="nodeOverlayClose" aria-label="Close">&times;</button>
+        <span class="nm" id="nodeOverlayName"></span>
+        <div id="nodeOverlayBody"></div>
       </div>
     </section>
 
     <aside>
       <div class="cfgpanel" id="cfgpanel"></div>
+      <h2 class="railhead" id="metersHead">Runtime Stats</h2>
       <div class="meters" id="meters"></div>
       <div class="ledger">
-        <h2 id="ledgerTitle">Today's DATT ledger</h2>
+        <h2 class="railhead" id="ledgerTitle">Today's DATT ledger</h2>
         <p id="ledgerSub">Nothing reused yet.</p>
         <div class="ledgergroup">
           <p class="ledgerlbl" id="pipsSkipLbl">Models skipped</p>
@@ -322,7 +353,10 @@
           <div class="pips" id="pipsTest"></div>
         </div>
       </div>
-      <div class="notes" id="notes"></div>
+      <div class="noteswrap" id="noteswrap">
+        <h2 class="railhead" id="notesHead">Highlights</h2>
+        <div class="notes" id="notes"></div>
+      </div>
     </aside>
   </main>
 
@@ -536,27 +570,43 @@ const LANE_SRC = {
 
 const CONFIGS = [
   {key:'lag_tolerance', def:'45m', opts:['45m','4h','7d'], scope:'model',
+   affects:['stg_orders','int_items','fct_orders'],
    what:'How much time must pass since the last upstream data change before a node is eligible for a rebuild. Data freshness only: a SQL change rebuilds regardless.',
    here:'raw.orders landed 90 minutes ago, and the incremental fct_orders is the expensive thing sitting at the end of that lane. Set the tolerance above 90 minutes and the whole orders lane, fct_orders included, is not yet eligible, so it is skipped in place and prod stays 90 minutes behind on purpose.'},
   {key:'compare_unrendered_code', def:false, opts:[false,true], scope:'model',
+   affects:['stg_payments'],
    what:'Check the Jinja template as well as the rendered SQL. A rebuild then needs both to change, so values that differ every run stop invalidating the model.',
    here:'stg_payments stamps env_var(\'AIRFLOW_RUN_ID\') into a column, so its rendered SQL differs on every single run. At the default it rebuilds every run regardless of how old raw.payments\' data is — turn this on and it drops back to the same lag_tolerance check as everything else.'},
   {key:'require_fresh_data_from', def:'any', opts:['any','all'], scope:'model',
+   affects:['mart'],
    what:'Whether any or all direct parents need fresh data before a node is eligible for a rebuild.',
    here:'mart_customer_360 has three parents. Only fct_orders actually rebuilt: fct_payments\' source data landed too, but it stayed inside lag_tolerance so it never rebuilt, and only a rebuilt parent counts as fresh. One fresh parent is enough at the default any. Switch to all and mart waits on fct_payments and dim_customers as well.'},
   {key:'evaluate_volatile_sql', def:false, opts:[false,true], scope:'model',
+   affects:['int_payments'],
    what:'Store and compare the runtime output of volatile functions instead of just the function name.',
    here:'int_payments selects current_timestamp(). This is the one dial here that costs you more: switch it on and the model rebuilds every run by design — even though fct_payments underneath it stays a plain reuse, since raw.payments\' data is still inside lag_tolerance.'},
   {key:'allow_clones', def:true, opts:[true,false], scope:'profile',
+   affects:[],
    what:'Whether dbt State may clone into a target at all. Set false on prod to stop dev or CI tables being cloned into production.',
    here:'No effect in this run: there\'s no fresher copy sitting in another schema this time. This is what actually clones stg_orders, int_order_items and fct_orders into her dev schema in scene 5, "State on, dev." Set it false there and she rebuilds all three from scratch instead.'},
   {key:'execute_hooks_on_any_reuse', def:false, opts:[false,true], scope:'model',
+   affects:['dim_customers'],
    what:'Run pre- and post-hooks even when a node is reused instead of built.',
    here:'dim_customers carries a post-hook that grants select. At the default a skipped model runs no hooks, so grants quietly drift.'},
   {key:'pre_clone', def:'if_missing', opts:['never','if_missing','always'], scope:'model',
+   affects:[],
    what:'Whether dbt State pre-populates incremental models and snapshots by cloning production before a run.',
    here:'No effect in this run: fct_orders (incremental) and snap_customer_tier (snapshot) already exist in the target schema. This one earns its keep in a fresh dev or CI schema, which is scene 5, "State on, dev."'}
 ];
+
+/* dbt-project stanza for a given config, illustrating where it's actually set */
+function cfgSnippet(c, val){
+  const v = shown(val);
+  if(c.scope === 'profile'){
+    return `my_target:\n  type: snowflake\n  ...\n  ${c.key}: ${v}`;
+  }
+  return `models:\n  my_project:\n    +${c.key}: ${v}`;
+}
 
 /* Production run. Every relation already exists in the target schema, so the
    fallback is a skip in place. A CI merge job left a fresher int_order_items
@@ -731,6 +781,7 @@ function drawGraph(){
       const ring = el('rect',{class:'failring', x:n.x-4, y:n.y-4, width:NW+8, height:NH+8, opacity:0});
       g.appendChild(ring);
     }
+    g.addEventListener('click', ()=> onNodeClick(n.id));
     dag.appendChild(g);
 
     if(n.type==='source'){
@@ -795,6 +846,18 @@ function renderSourceAges(scene){
   const ages = scene.srcAge || {};
   NODES.filter(n=>n.type==='source').forEach(n=>{
     dag.querySelector(`.agelab[data-id="${n.id}"]`).textContent = ages[n.id] || '';
+  });
+}
+
+function updateLegend(scene){
+  const nodeActs = new Set(Object.values(scene.nodes || {}));
+  const anyDatt = ALL_MODELS.some(id => (scene.nodes[id]==='reuse' || scene.nodes[id]==='clone') && BILLABLE(id));
+  const show = {
+    b: nodeActs.has('build'), r: nodeActs.has('reuse'), c: nodeActs.has('clone'),
+    x: nodeActs.has('blocked'), datt: anyDatt, tests: true
+  };
+  $('legend').querySelectorAll('span[data-key]').forEach(s=>{
+    s.style.display = show[s.dataset.key] ? '' : 'none';
   });
 }
 
@@ -932,17 +995,17 @@ function renderNotes(scene, show){
   document.querySelector('.runbar').style.display = scene.tuning ? 'none' : '';
   $('log').style.display = scene.tuning ? 'none' : '';
   $('meters').style.display = scene.tuning ? 'none' : '';
+  $('metersHead').style.display = scene.tuning ? 'none' : '';
   document.querySelector('.ledger').style.display = scene.tuning ? 'none' : '';
   const box = $('notes');
   if(scene.tuning || !scene.notes.length){
-    box.style.display = 'none';
+    $('noteswrap').style.display = 'none';
     box.innerHTML = '';
     renderConfigPanel();
     return;
   }
   $('cfgpanel').style.display = 'none';
-  box.style.display = '';
-  box.className = 'notes';
+  $('noteswrap').style.display = '';
   box.innerHTML = show
     ? scene.notes.map(([h,b,key])=>`
         <div class="note${key?' key':''}"><div class="bar"></div><div><b>${h}.</b> ${b}</div></div>`).join('')
@@ -955,6 +1018,7 @@ const shown = v => typeof v === 'boolean' ? String(v) : v;
 function renderConfigPanel(){
   const box = $('cfgpanel');
   box.style.display = 'block';
+  hideNodeOverlay();
 
   const cur = evaluateTuning(cfg);
   const curT = tally({nodes:cur.nodes, tests:cur.tests});
@@ -976,7 +1040,10 @@ function renderConfigPanel(){
       </button>
       ${open?`<div class="cfgbody">
         <p>${c.what}</p>
-        <p class="here">${c.here}</p>
+        <pre class="cfgsnippet"><code>${cfgSnippet(c, cur)}</code></pre>
+        ${c.affects.length
+          ? `<p class="cfghint">Click the highlighted node in the graph to see what this changes.</p>`
+          : `<p class="here">${c.here}</p>`}
         <div class="segs">${c.opts.map(o=>
           `<button class="seg" data-cfg="${c.key}" data-val="${shown(o)}" aria-pressed="${o===cur}">${shown(o)}${o===c.def?' ·':''}</button>`
         ).join('')}</div>
@@ -999,6 +1066,51 @@ function renderConfigPanel(){
   });
   const r = $('cfgreset');
   if(r) r.onclick = ()=>{ cfg = {...CFG_DEFAULT}; renderConfigPanel(); runScene(true); };
+
+  paintAffected();
+}
+
+/* highlight the nodes tied to whichever config row is open in the accordion */
+function paintAffected(){
+  const c = CONFIGS.find(x=>x.key===openCfg);
+  const affects = new Set(c ? c.affects : []);
+  NODES.forEach(n=>{
+    const g = dag.querySelector(`.node[data-id="${n.id}"]`);
+    if(!g) return;
+    g.classList.toggle('cfg-affected', affects.has(n.id));
+  });
+  if(overlayNodeId && !affects.has(overlayNodeId)) hideNodeOverlay();
+}
+
+let overlayNodeId = null;
+function onNodeClick(nodeId){
+  const scene = SCENES[idx];
+  if(!scene.tuning || !openCfg) return;
+  const c = CONFIGS.find(x=>x.key===openCfg);
+  if(!c || !c.affects.includes(nodeId)) return;
+  showNodeOverlay(nodeId, c.here);
+}
+
+function showNodeOverlay(nodeId, text){
+  overlayNodeId = nodeId;
+  const n = NODE[nodeId];
+  const overlay = $('nodeOverlay');
+  $('nodeOverlayName').textContent = n.name;
+  $('nodeOverlayBody').textContent = text;
+  const stageRect = document.querySelector('.stage').getBoundingClientRect();
+  const dagRect = dag.getBoundingClientRect();
+  const scale = dagRect.width / 1040;
+  const left = dagRect.left - stageRect.left + (n.x + NW/2) * scale;
+  const top = dagRect.top - stageRect.top + (n.y + NH) * scale + 8;
+  overlay.style.left = Math.min(left, stageRect.width - 20) + 'px';
+  overlay.style.top = top + 'px';
+  overlay.hidden = false;
+}
+
+function hideNodeOverlay(){
+  overlayNodeId = null;
+  const overlay = $('nodeOverlay');
+  if(overlay) overlay.hidden = true;
 }
 
 /* ---------------------------------------------------------------
@@ -1012,6 +1124,7 @@ function runScene(instant){
   logEnabled = !scene.tuning;
   if(scene.tuning){ applyTuning(scene); seedLedger(idx); }
   renderSourceAges(scene);
+  updateLegend(scene);
   $('log').innerHTML = '';
   live = blankLive();
   $('run').disabled = true;
@@ -1129,8 +1242,10 @@ function go(i, fromHash){
     if(location.hash !== target) history.pushState(null, '', target);
   }
   clearTimers();
+  hideNodeOverlay();
   if(s.tuning) applyTuning(s);
   renderSourceAges(s);
+  updateLegend(s);
   seedLedger(idx);
   [...$('steps').children].forEach((b,j)=> b.setAttribute('aria-selected', j===idx));
   $('env').textContent = s.envLabel;
@@ -1157,7 +1272,13 @@ $('prev').onclick = ()=> go(idx-1);
 $('next').onclick = ()=> go(idx+1);
 $('run').onclick = ()=> runScene();
 
+$('nodeOverlayClose').onclick = hideNodeOverlay;
+document.querySelector('.stage').addEventListener('click', e=>{
+  if(overlayNodeId && !e.target.closest('.node') && !e.target.closest('#nodeOverlay')) hideNodeOverlay();
+});
+
 document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ hideNodeOverlay(); return; }
   if(e.target.tagName === 'BUTTON' && e.key === ' ') return;
   if(e.key==='ArrowRight') go(idx+1);
   else if(e.key==='ArrowLeft') go(idx-1);
