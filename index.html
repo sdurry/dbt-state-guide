@@ -168,6 +168,10 @@
   .datt-dot{fill:var(--datt)}
   .agelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.02em}
   .tlab{font-family:var(--mono); font-size:11px; fill:var(--fg)}
+  .ns-bg{fill:var(--panel-2); stroke:var(--rule); stroke-width:1}
+  .ns-label{font-family:var(--mono); font-size:10.5px; letter-spacing:.02em}
+  .ns-label .ns-key{fill:var(--fg-faint)}
+  .ns-label .ns-val{fill:var(--fg)}
 
   .legend{display:flex; gap:clamp(10px,1.5vw,22px); flex-wrap:wrap; font-size:.8em; color:var(--fg-dim); border-top:1px solid var(--rule-soft); padding-top:12px}
   .legend span{display:flex; align-items:center; gap:7px}
@@ -549,9 +553,9 @@ const SCENES = [
     premise:'Her dev schema is empty, so she cannot just run the test — the tables it points at do not exist. She pulls the whole upstream lane in with the + operator, waits for fct_orders to build over full history, and repeats that on every edit. Five iterations before the fix lands.',
     ledger:'dev',
     iterations:5,
-    srcAge:{src_orders:'landed 3h ago'},
+    srcAge:{src_orders:'landed 25m ago'},
     nodes:{
-      src_orders:'fresh', src_customers:'pending',
+      src_orders:'stale', src_customers:'pending',
       stg_orders:'build', int_items:'build', fct_orders:'build',
       stg_customers:'pending', snap_tier:'pending', dim_customers:'pending',
       src_payments:'pending', stg_payments:'pending', int_payments:'pending', fct_payments:'pending', mart:'pending'
@@ -570,10 +574,10 @@ const SCENES = [
     premise:'Same command, no flags to remember. dbt State finds identical logic with fresher data in the prod schema, clones the upstream tables into her dev schema and replays the test results it already holds. A reused result still surfaces as a failure, so the red test is in front of her without a single query, and the cloned fct_orders is there to inspect. Only her edits to fct_orders trigger a real build after that.',
     ledger:'dev',
     iterations:5,
-    srcAge:{src_orders:'landed 3h ago'},
+    srcAge:{src_orders:'landed 25m ago'},
     laterIteration:{nodes:{fct_orders:'build'}, tests:{t4:'run'}},
     nodes:{
-      src_orders:'fresh', src_customers:'pending',
+      src_orders:'stale', src_customers:'pending',
       stg_orders:'clone', int_items:'clone', fct_orders:'clone',
       stg_customers:'pending', snap_tier:'pending', dim_customers:'pending',
       src_payments:'pending', stg_payments:'pending', int_payments:'pending', fct_payments:'pending', mart:'pending'
@@ -827,8 +831,13 @@ function edgePath(a,b){
   return `M${x1} ${y1} C${x1+45} ${y1} ${x2-45} ${y2} ${x2} ${y2}`;
 }
 
+const NAMESPACE = {prod:'prod.analytics', dev:'dev.dbt_sdurry'};
+
 function drawGraph(){
   dag.innerHTML = '';
+
+  dag.appendChild(el('rect',{class:'ns-bg', x:0, y:2, width:172, height:20, rx:4}));
+  dag.appendChild(el('text',{class:'ns-label', x:10, y:16}));
 
   EDGES.forEach(([a,b])=>{
     const p = el('path',{d:edgePath(a,b), class:'edge', 'data-from':a, 'data-to':b});
@@ -914,6 +923,14 @@ function renderSourceAges(scene){
   NODES.filter(n=>n.type==='source').forEach(n=>{
     dag.querySelector(`.agelab[data-id="${n.id}"]`).textContent = ages[n.id] || '';
   });
+}
+
+function renderNamespace(scene){
+  const label = dag.querySelector('.ns-label');
+  label.innerHTML = '';
+  const key = el('tspan',{class:'ns-key'}); key.textContent = 'target: ';
+  const val = el('tspan',{class:'ns-val'}); val.textContent = NAMESPACE[scene.env] || '';
+  label.append(key, val);
 }
 
 function updateLegend(scene){
@@ -1415,6 +1432,7 @@ function go(i, fromHash){
   closeDeepDive();
   if(s.tuning) applyTuning(s);
   renderSourceAges(s);
+  renderNamespace(s);
   updateLegend(s);
   seedLedger(idx);
   [...$('steps').children].forEach((b,j)=> b.setAttribute('aria-selected', j===idx));
