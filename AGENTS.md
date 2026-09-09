@@ -17,7 +17,20 @@ The model: two sources into two lanes converging on a mart. `raw.orders`
 (table) → `fct_orders` (incremental); `raw.customers` (stale, 3 days) →
 `stg_customers` (view) → `snap_customer_tier` (snapshot) → `dim_customers`
 (table); both lanes → `mart_customer_360`. `assert_order_total_positive` on
-`fct_orders` is the test failure that drives scenes 3–5. Metrics (`tally`,
+`fct_orders` is the test failure that drives scenes 3–5. `stg_orders` and
+`stg_customers` are the paired select-* example: `stg_orders`' CTE names its
+columns explicitly, so dbt State can resolve `select *` statically and
+reuse it; `stg_customers`' CTE is itself a `select *` (star-on-star), so it
+rebuilds every run regardless of freshness — still $0 DATT (it's a view),
+just a wasted build. `stg_payments` has its own, unrelated always-rebuilds
+quirk (Jinja `env_var()` in a column) — a third, deliberately different
+reason a view still rebuilds. `DEEPDIVE_STAR` in `index.html` holds the SQL
+for all three and is shown by clicking any of the three nodes in scenes 2–3
+(`scene.deepDive`); keep its three `why` strings in sync with the node-hover
+`nodeNotes` text and this paragraph if the mechanics ever change. Don't
+accidentally make `stg_customers` reusable again when touching scene copy
+or `evaluateTuning` — its whole point is being the contrast case to
+`stg_orders`. Metrics (`tally`,
 `economics`, `dattKeys`) are computed at runtime from painted node state —
 never hardcode a total; change a node's state and the meters/ledger/log
 follow automatically. `economics().wh` is warehouse compute, displayed via
@@ -46,7 +59,23 @@ Not all claims carry the same confidence — know which is which before editing:
   each test is its own target table; test results are reused when the tested
   node is unchanged; `lag_tolerance` only affects data freshness (a SQL
   change rebuilds regardless); Python models and custom materializations are
-  never reused.
+  never reused. A view using `select *` is only reused when every implicit
+  column it expands to can be statically determined without executing the
+  query — `select *` over a CTE with an explicit column list (the standard
+  staging pattern, and what `stg_orders` uses) qualifies. A `select *`
+  sitting over something dbt can't statically resolve rebuilds
+  unconditionally. (Formerly listed below as a "known documentation
+  conflict" — resolved; see the `views-rebuilt` FAQ in README's Sources.)
+- **Illustrative interpretation — plausible but not confirmed wording**:
+  `stg_customers` is modeled as the contrast case to `stg_orders` — its CTE
+  is itself a `select *` (star-on-star, no explicit column list anywhere in
+  the chain), which this build treats as the canonical example of "dbt can't
+  statically resolve it." The general rule above (verified) is sourced to
+  the `views-rebuilt` FAQ; the specific claim that a nested `select *` is
+  what defeats resolution is this build's own extension of that rule, not a
+  line quoted from the FAQ. Don't cite the "star-on-star" framing as
+  verbatim documented behavior without checking the FAQ's actual wording
+  first.
 - **Verified only in the dbt-agent-skills repo, not on the public billing
   page — confirm with PMM before this is quoted publicly**: views are never
   billed as DATTs even when reused/cloned (their tests still bill normally,
@@ -61,13 +90,6 @@ Not all claims carry the same confidence — know which is which before editing:
   views and walks upstream past a view to find a real table. No source states
   this outright — verify empirically with `dbt state explain --verbose -s
   <test>` after a source load with no SQL changes before treating it as fact.
-- **Known documentation conflict**: whether `select *` in a view is reusable
-  when it sits over a CTE with explicit columns (the standard staging
-  pattern). One doc source says yes (v2 behavior); another says dbt State
-  always rebuilds views using `select *` anywhere, including inside CTEs.
-  **This build assumes v2 behavior**, and scene 2 depends on it — under v1
-  semantics both staging views would go orange and the scene's story weakens
-  substantially.
 - **Modeling assumptions** (not directly stated in docs, adopted for this
   build): a DATT is per target table (database + schema) per day, so dev
   clones count separately from prod skips of the same model — if DATTs are

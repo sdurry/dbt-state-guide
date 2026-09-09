@@ -163,10 +163,15 @@
   .failring{fill:none; stroke:var(--fail); stroke-width:2; rx:6}
   .node.cfg-affected{cursor:help}
   .node.cfg-affected rect.card{stroke:var(--datt); stroke-width:2.5}
+  .node.has-note{cursor:help}
 
   .datt-dot{fill:var(--datt)}
   .agelab{font-family:var(--mono); font-size:10.5px; fill:var(--fg-faint); letter-spacing:.02em}
   .tlab{font-family:var(--mono); font-size:11px; fill:var(--fg)}
+  .ns-bg{fill:var(--panel-2); stroke:var(--rule); stroke-width:1}
+  .ns-label{font-family:var(--mono); font-size:10.5px; letter-spacing:.02em}
+  .ns-label .ns-key{fill:var(--fg-faint)}
+  .ns-label .ns-val{fill:var(--fg)}
 
   .legend{display:flex; gap:clamp(10px,1.5vw,22px); flex-wrap:wrap; font-size:.8em; color:var(--fg-dim); border-top:1px solid var(--rule-soft); padding-top:12px}
   .legend span{display:flex; align-items:center; gap:7px}
@@ -265,6 +270,48 @@
   .foot{padding:8px clamp(16px,2.2vw,32px) 14px; font-size:.74em; color:var(--fg-faint); background:var(--panel)}
   .foot kbd{font-family:var(--mono); border:1px solid var(--rule); border-radius:3px; padding:0 4px}
 
+  /* ---------- deep-dive modal ---------- */
+  .deepdive-backdrop{
+    position:fixed; inset:0; z-index:50; padding:clamp(14px,4vw,32px);
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(6,12,18,.72); backdrop-filter:blur(2px);
+  }
+  .deepdive-backdrop[hidden]{display:none}
+  .deepdive-panel{
+    background:var(--panel); border:1px solid var(--rule); border-radius:8px;
+    box-shadow:0 24px 64px rgba(0,0,0,.5); max-width:920px; width:100%;
+    max-height:88vh; overflow:auto; padding:20px clamp(16px,2.4vw,26px) 24px;
+  }
+  .ddhead{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px}
+  .ddhead h2{margin:0; font-size:1.05em; font-weight:650; letter-spacing:-.01em}
+  .ddhead p{margin:5px 0 0; color:var(--fg-dim); font-size:.86em; max-width:60ch}
+  .ddclose{
+    flex:none; width:30px; height:30px; border-radius:50%; border:1px solid var(--rule);
+    background:transparent; color:var(--fg-dim); font-size:1em; cursor:pointer; line-height:1;
+  }
+  .ddclose:hover{color:var(--fg); border-color:#3A566D}
+  .ddgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px}
+  .ddcard{
+    border:1px solid var(--rule); border-top:3px solid var(--rule); border-radius:8px;
+    background:var(--panel-2); padding:13px 15px 15px; display:flex; flex-direction:column; gap:9px; min-width:0;
+  }
+  .ddcard.good{border-top-color:var(--reuse)}
+  .ddcard.bad{border-top-color:var(--burn)}
+  .ddpath{font-family:var(--mono); font-size:.78em; color:var(--fg-faint)}
+  .ddverdict{
+    display:inline-flex; align-self:flex-start; font-family:var(--mono); font-size:.76em;
+    letter-spacing:.03em; padding:3px 9px; border-radius:999px; border:1px solid;
+  }
+  .ddverdict.good{color:var(--reuse); border-color:#1F4A40; background:var(--reuse-soft)}
+  .ddverdict.bad{color:var(--burn); border-color:#5A3227; background:var(--burn-soft)}
+  .ddcode{
+    margin:0; font-family:var(--mono); font-size:.82em; line-height:1.6; color:var(--fg);
+    white-space:pre; overflow:auto; padding:2px 0;
+  }
+  .ddcode .tok-good{color:var(--reuse); font-weight:600}
+  .ddcode .tok-bad{color:var(--burn); font-weight:600}
+  .ddwhy{margin:0; font-size:.85em; color:var(--fg-dim)}
+
   :focus-visible{outline:2px solid #6FB8E8; outline-offset:2px}
   @media (min-width:941px){
     .app{height:100vh; overflow:hidden}
@@ -359,6 +406,10 @@
   </div>
 </div>
 
+<div class="deepdive-backdrop" id="deepdive" hidden>
+  <div class="deepdive-panel" id="deepdivePanel" role="dialog" aria-modal="true" aria-labelledby="ddTitle"></div>
+</div>
+
 <script>
 /* ---------------------------------------------------------------
    Graph
@@ -444,42 +495,55 @@ const SCENES = [
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'With dbt State, only the lane with new data rebuilds',
-    premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane hasn\'t moved in days, so it\'s reused in place. The payments lane is mid-cycle — its tables are reused too, but stg_payments itself rebuilds every run regardless, a quirk in its code the tuning tab unpacks later — reuse is what a DATT counts, regardless of why the data didn\'t change.',
+    premise:'dbt State compares each node\'s logic hash and its upstream last-modified timestamps. The orders lane has fresh data, so it builds. The customer lane hasn\'t moved in days — snap_customer_tier and dim_customers are reused in place — but stg_customers rebuilds anyway: its select * can\'t be statically resolved, so dbt runs it every time regardless of freshness. The payments lane is mid-cycle — its tables are reused too, but stg_payments itself rebuilds every run for its own reason, a quirk the tuning tab unpacks later — reuse is what a DATT counts, regardless of why the data didn\'t change.',
     ledger:'prod',
+    deepDive:true,
     srcAge:{src_orders:'landed 45m ago', src_customers:'unchanged 3d', src_payments:'landed 50m ago'},
     nodes:{
       src_orders:'fresh', src_customers:'stale', src_payments:'stale',
       stg_orders:'reuse', int_items:'build', fct_orders:'build',
-      stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse',
+      stg_customers:'build', snap_tier:'reuse', dim_customers:'reuse',
       stg_payments:'build', int_payments:'reuse', fct_payments:'reuse', mart:'build'
     },
-    tests:{t1:'run',t2:'run',t3:'run',t4:'run',t5:'reuse',t6:'reuse',t7:'reuse',t8:'run',t9:'run',t10:'run',t11:'reuse',t12:'reuse'},
+    tests:{t1:'run',t2:'run',t3:'run',t4:'run',t5:'run',t6:'reuse',t7:'reuse',t8:'run',t9:'run',t10:'run',t11:'reuse',t12:'reuse'},
     perDay:5,
     notes:[
       ['Views are reused, and never billed','stg_orders sits on the fresh source, but a view stores nothing: it reads the new rows when queried, so unchanged logic means no rebuild. Views are also excluded from DATTs whether they are skipped or cloned. Their tests are billed as normal.'],
-      ['Reuse is the unit you pay for','Eleven nodes were handed back instead of executed, but only nine are DATTs: the two views are free. The snapshot counts like any other relation, and so does every distinct test.', true],
+      ['Same rule, two other reasons','stg_orders reuses because its CTE names its columns, so dbt can resolve what select * expands to without running anything. stg_customers rebuilds every run because its CTE is itself a select * — two stars stacked, no column list anywhere in the chain. stg_payments rebuilds for a completely different reason: an env_var() stamped into a column changes its rendered SQL every run. Click any of the three to compare the SQL.'],
+      ['Reuse is the unit you pay for','Nine nodes were handed back instead of executed, but only eight are DATTs: one view is free. The snapshot counts like any other relation, and so does every distinct test.', true],
       ['Freshness is a live warehouse check, not memory','Each run, dbt State reads last-modified timestamps for upstream tables straight from warehouse metadata (like INFORMATION_SCHEMA), not from what it built last time. The age next to each source above is that check — how long since the data actually changed.']
-    ]
+    ],
+    nodeNotes:{
+      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt. Click to compare with stg_customers and stg_payments.',
+      stg_customers:'select * here sits over a CTE that is itself a select * — two stars stacked, so dbt can\'t resolve the output columns without running the query. Rebuilds every run, even though raw.customers hasn\'t moved in days. Click to compare with stg_orders and stg_payments.',
+      stg_payments:'No select * here at all — every column is explicit. But env_var(\'AIRFLOW_RUN_ID\') renders a different literal into the compiled SQL every run, so its rendered code never matches last run\'s. Rebuilds every run for a completely different reason than stg_customers. Click to compare.'
+    }
   },
   {
     tab:'Run 2, same day',
     env:'prod', envLabel:'production',
     cmd:'dbt build',
     title:'Second run of the day: same reuse, no new DATTs, one red test',
-    premise:'Three hours later the job runs again. The customer lane is reused again — you already paid for it once today, so the DATT bill doesn\'t move — and the payments tables now have their own batch to catch up on, right alongside orders. stg_payments rebuilds again too, the same quirk as last run. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
+    premise:'Three hours later the job runs again. snap_customer_tier and dim_customers are reused again — you already paid for them once today, so the DATT bill doesn\'t move — though stg_customers itself still rebuilds, the same select-* quirk as last run. The payments tables now have their own batch to catch up on, right alongside orders, and stg_payments rebuilds again too, its own quirk from last run. This time the fresh batch trips a data quality test on fct_orders, and dbt build stops the mart before it is written.',
     ledger:'prod',
+    deepDive:true,
     srcAge:{src_orders:'landed 15m ago', src_customers:'unchanged 3d', src_payments:'landed 25m ago'},
     nodes:{
       src_orders:'fresh', src_customers:'stale', src_payments:'fresh',
       stg_orders:'reuse', int_items:'build', fct_orders:'build',
-      stg_customers:'reuse', snap_tier:'reuse', dim_customers:'reuse',
+      stg_customers:'build', snap_tier:'reuse', dim_customers:'reuse',
       stg_payments:'build', int_payments:'build', fct_payments:'build', mart:'blocked'
     },
-    tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'reuse',t6:'reuse',t7:'reuse',t8:'blocked',t9:'blocked',t10:'run',t11:'run',t12:'run'},
+    tests:{t1:'run',t2:'run',t3:'run',t4:'fail',t5:'run',t6:'reuse',t7:'reuse',t8:'blocked',t9:'blocked',t10:'run',t11:'run',t12:'run'},
     notes:[
-      ['A DATT is charged once per day','Every reuse after the first is free. The more often the job runs, the further the same five DATTs are amortised — this is why hourly jobs save far more than daily ones.', true],
+      ['A DATT is charged once per day','Every reuse after the first is free. The more often the job runs, the further the same DATTs are amortised — this is why hourly jobs save far more than daily ones.', true],
       ['Bad data stops at the gate','assert_order_total_positive fails, so mart_customer_360 and its two tests never run. Someone gets paged, and the next two scenes are her afternoon.']
-    ]
+    ],
+    nodeNotes:{
+      stg_orders:'select * here expands over an explicit-column CTE (the staging pattern), so dbt State can statically resolve every implicit column — that\'s what makes this view reusable instead of rebuilt. Click to compare with stg_customers and stg_payments.',
+      stg_customers:'select * here sits over a CTE that is itself a select * — two stars stacked, so dbt can\'t resolve the output columns without running the query. Rebuilds every run, even though raw.customers hasn\'t moved in days. Click to compare with stg_orders and stg_payments.',
+      stg_payments:'No select * here at all — every column is explicit. But env_var(\'AIRFLOW_RUN_ID\') renders a different literal into the compiled SQL every run, so its rendered code never matches last run\'s. Rebuilds every run for a completely different reason than stg_customers. Click to compare.'
+    }
   },
   {
     tab:'No state, dev',
@@ -489,9 +553,9 @@ const SCENES = [
     premise:'Her dev schema is empty, so she cannot just run the test — the tables it points at do not exist. She pulls the whole upstream lane in with the + operator, waits for fct_orders to build over full history, and repeats that on every edit. Five iterations before the fix lands.',
     ledger:'dev',
     iterations:5,
-    srcAge:{src_orders:'landed 3h ago'},
+    srcAge:{src_orders:'landed 25m ago'},
     nodes:{
-      src_orders:'fresh', src_customers:'pending',
+      src_orders:'stale', src_customers:'pending',
       stg_orders:'build', int_items:'build', fct_orders:'build',
       stg_customers:'pending', snap_tier:'pending', dim_customers:'pending',
       src_payments:'pending', stg_payments:'pending', int_payments:'pending', fct_payments:'pending', mart:'pending'
@@ -510,10 +574,10 @@ const SCENES = [
     premise:'Same command, no flags to remember. dbt State finds identical logic with fresher data in the prod schema, clones the upstream tables into her dev schema and replays the test results it already holds. A reused result still surfaces as a failure, so the red test is in front of her without a single query, and the cloned fct_orders is there to inspect. Only her edits to fct_orders trigger a real build after that.',
     ledger:'dev',
     iterations:5,
-    srcAge:{src_orders:'landed 3h ago'},
+    srcAge:{src_orders:'landed 25m ago'},
     laterIteration:{nodes:{fct_orders:'build'}, tests:{t4:'run'}},
     nodes:{
-      src_orders:'fresh', src_customers:'pending',
+      src_orders:'stale', src_customers:'pending',
       stg_orders:'clone', int_items:'clone', fct_orders:'clone',
       stg_customers:'pending', snap_tier:'pending', dim_customers:'pending',
       src_payments:'pending', stg_payments:'pending', int_payments:'pending', fct_payments:'pending', mart:'pending'
@@ -522,7 +586,10 @@ const SCENES = [
     notes:[
       ['No --defer, no --state, no manifest','Deferral happens on its own, and it goes further than deferral: an unchanged selected node is cloned rather than rebuilt, so she can query it. The manifest juggling that state:modified needs is gone.'],
       ['A replayed failure is still a failure','She sees the red test before any query runs. The clone of stg_orders is free because it is a view; the two cloned tables and all four test results are her DATTs, charged once for the day.', true]
-    ]
+    ],
+    nodeNotes:{
+      stg_orders:'Cloning follows the same rule as reuse: stg_orders\' select * resolves over an explicit-column CTE, so dbt State can statically confirm its columns are unchanged before cloning it in — that\'s why it\'s free.'
+    }
   },
   {
     tab:'Tuning',
@@ -622,16 +689,22 @@ function evaluateTuning(cfgIn){
     const pastLag = pastLagFor(id);
     const dataReady = gate && pastLag;
     const isView = NODE[id].type === 'view';
+    /* stg_customers' select * sits over a CTE that is itself a select * — no
+       explicit column list anywhere in the chain, so dbt can never resolve
+       the output statically. Unlike stg_payments' env_var quirk, no config
+       here fixes it; it needs a SQL rewrite, not a dial. */
     const logic = (id==='stg_payments' && !c.compare_unrendered_code)
         ? "rendered SQL changed, env_var('AIRFLOW_RUN_ID')"
       : (id==='int_payments' && c.evaluate_volatile_sql)
         ? 'volatile current_timestamp() now compared by value'
+      : (id==='stg_customers')
+        ? 'select * stacked on select *, no explicit column list anywhere in the chain — not statically resolvable, no config fixes this'
       : null;
 
     let a, why;
     if(logic){ a='build'; why=logic; }
     else if(isView && dataReady){
-      a='reuse'; why='a view stores nothing to rebuild — reused in place, but its test still runs against the live data';
+      a='reuse'; why='a view stores nothing to rebuild — reused in place because its select * resolves to statically known columns; its test still runs against the live data';
     }
     else if(dataReady){
       if(id==='mart'){ a='build'; why=`enough parents fresh (require_fresh_data_from: ${c.require_fresh_data_from})`; }
@@ -758,8 +831,13 @@ function edgePath(a,b){
   return `M${x1} ${y1} C${x1+45} ${y1} ${x2-45} ${y2} ${x2} ${y2}`;
 }
 
+const NAMESPACE = {prod:'prod.analytics', dev:'dev.dbt_sdurry'};
+
 function drawGraph(){
   dag.innerHTML = '';
+
+  dag.appendChild(el('rect',{class:'ns-bg', x:0, y:2, width:172, height:20, rx:4}));
+  dag.appendChild(el('text',{class:'ns-label', x:10, y:16}));
 
   EDGES.forEach(([a,b])=>{
     const p = el('path',{d:edgePath(a,b), class:'edge', 'data-from':a, 'data-to':b});
@@ -779,6 +857,7 @@ function drawGraph(){
     }
     g.addEventListener('mouseenter', ()=> onNodeHover(n.id));
     g.addEventListener('mouseleave', hideNodeOverlay);
+    g.addEventListener('click', ()=> onNodeClick(n.id));
     dag.appendChild(g);
 
     if(n.type==='source'){
@@ -844,6 +923,14 @@ function renderSourceAges(scene){
   NODES.filter(n=>n.type==='source').forEach(n=>{
     dag.querySelector(`.agelab[data-id="${n.id}"]`).textContent = ages[n.id] || '';
   });
+}
+
+function renderNamespace(scene){
+  const label = dag.querySelector('.ns-label');
+  label.innerHTML = '';
+  const key = el('tspan',{class:'ns-key'}); key.textContent = 'target: ';
+  const val = el('tspan',{class:'ns-val'}); val.textContent = NAMESPACE[scene.env] || '';
+  label.append(key, val);
 }
 
 function updateLegend(scene){
@@ -1080,10 +1167,114 @@ function paintAffected(){
 let overlayNodeId = null;
 function onNodeHover(nodeId){
   const scene = SCENES[idx];
-  if(!scene.tuning || !openCfg) return;
-  const c = CONFIGS.find(x=>x.key===openCfg);
-  if(!c || !c.affects.includes(nodeId)) return;
-  showNodeOverlay(nodeId, c.here);
+  if(scene.tuning){
+    if(!openCfg) return;
+    const c = CONFIGS.find(x=>x.key===openCfg);
+    if(!c || !c.affects.includes(nodeId)) return;
+    showNodeOverlay(nodeId, c.here);
+    return;
+  }
+  const note = scene.nodeNotes && scene.nodeNotes[nodeId];
+  if(note) showNodeOverlay(nodeId, note);
+}
+
+/* cursor:help affordance for nodes that carry a hover explanation this scene */
+function paintNodeNotes(scene){
+  const keys = new Set(Object.keys(scene.nodeNotes || {}));
+  NODES.forEach(n=>{
+    const g = dag.querySelector(`.node[data-id="${n.id}"]`);
+    if(!g) return;
+    g.classList.toggle('has-note', keys.has(n.id));
+  });
+}
+
+/* ---------------------------------------------------------------
+   select * deep dive: two fixed SQL examples, one reusable, one not.
+   Hand-marked spans, not a tokenizer — the content is two short, static,
+   trusted strings, so this is simpler than it would be to generalize.
+----------------------------------------------------------------*/
+const DEEPDIVE_STAR = {
+  title:'Three views, three fates',
+  sub:'stg_orders, stg_customers, and stg_payments are all views. Only one of them is actually reused.',
+  cards:[
+    {id:'stg_orders', tone:'good', verdict:'REUSED',
+     code:
+`-- ${NODE.stg_orders.path}
+with source as (
+
+    <span class="tok-good">select
+        order_id,
+        customer_id,
+        order_date,
+        status</span>
+
+    from {{ source('raw', 'orders') }}
+
+)
+
+select * from source`,
+     why:'The CTE names its columns, so dbt can resolve exactly what the outer select * expands to — without running the query. Unchanged logic, unchanged columns: reused in place.'},
+    {id:'stg_customers', tone:'bad', verdict:'REBUILT EVERY RUN',
+     code:
+`-- ${NODE.stg_customers.path}
+with source as (
+
+    <span class="tok-bad">select *</span> from {{ source('raw', 'customers') }}
+
+)
+
+select * from source`,
+     why:'Two stars stacked — no column list anywhere in the chain — so dbt can\'t resolve the output without executing it. Still a view, so still $0 DATT, just a wasted build every run.'},
+    {id:'stg_payments', tone:'bad', verdict:'REBUILT EVERY RUN',
+     code:
+`-- ${NODE.stg_payments.path}
+select
+    payment_id,
+    order_id,
+    payment_amount,
+    payment_method,
+    <span class="tok-bad">'{{ env_var('AIRFLOW_RUN_ID') }}'</span> as loaded_by_run_id
+
+from {{ source('raw', 'payments') }}`,
+     why:'Not a select * problem at all — every column is explicit. But env_var(\'AIRFLOW_RUN_ID\') renders a different literal into the compiled SQL on every run, so its rendered code never matches last run\'s. Without compare_unrendered_code on, dbt can\'t tell the underlying logic is unchanged. Same wasted-build outcome as stg_customers, completely different cause.'}
+  ]
+};
+
+function renderDeepDive(){
+  const d = DEEPDIVE_STAR;
+  $('deepdivePanel').innerHTML = `
+    <div class="ddhead">
+      <div>
+        <h2 id="ddTitle">${d.title}</h2>
+        <p>${d.sub}</p>
+      </div>
+      <button class="ddclose" id="ddCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="ddgrid">
+      ${d.cards.map(c=>`
+        <div class="ddcard ${c.tone}">
+          <span class="ddpath">${NODE[c.id].name}</span>
+          <span class="ddverdict ${c.tone}">${c.verdict}</span>
+          <pre class="ddcode">${c.code}</pre>
+          <p class="ddwhy">${c.why}</p>
+        </div>`).join('')}
+    </div>`;
+  $('ddCloseBtn').onclick = closeDeepDive;
+}
+
+function openDeepDive(){
+  $('deepdive').hidden = false;
+}
+function closeDeepDive(){
+  $('deepdive').hidden = true;
+}
+
+const DEEPDIVE_NODES = new Set(['stg_orders', 'stg_customers', 'stg_payments']);
+function onNodeClick(nodeId){
+  const scene = SCENES[idx];
+  if(!scene.deepDive) return;
+  if(!DEEPDIVE_NODES.has(nodeId)) return;
+  openDeepDive();
 }
 
 function showNodeOverlay(nodeId, text){
@@ -1238,8 +1429,10 @@ function go(i, fromHash){
   }
   clearTimers();
   hideNodeOverlay();
+  closeDeepDive();
   if(s.tuning) applyTuning(s);
   renderSourceAges(s);
+  renderNamespace(s);
   updateLegend(s);
   seedLedger(idx);
   [...$('steps').children].forEach((b,j)=> b.setAttribute('aria-selected', j===idx));
@@ -1260,17 +1453,20 @@ function go(i, fromHash){
   renderMeters(s, false);
   renderLedger(s);
   $('run').disabled = false;
+  paintNodeNotes(s);
   if(s.tuning) runScene(true);
 }
 
 $('prev').onclick = ()=> go(idx-1);
 $('next').onclick = ()=> go(idx+1);
 $('run').onclick = ()=> runScene();
+$('deepdive').addEventListener('click', e=>{ if(e.target.id === 'deepdive') closeDeepDive(); });
 
 
 document.addEventListener('keydown', e=>{
-  if(e.key==='Escape'){ hideNodeOverlay(); return; }
+  if(e.key==='Escape'){ hideNodeOverlay(); closeDeepDive(); return; }
   if(e.target.tagName === 'BUTTON' && e.key === ' ') return;
+  if(!$('deepdive').hidden) return;
   if(e.key==='ArrowRight') go(idx+1);
   else if(e.key==='ArrowLeft') go(idx-1);
   else if(e.key.toLowerCase()==='r') runScene();
@@ -1285,6 +1481,7 @@ window.addEventListener('popstate', ()=> go(sceneFromHash(), true));
 
 drawGraph();
 buildSteps();
+renderDeepDive();
 go(sceneFromHash());
 </script>
 </body>
